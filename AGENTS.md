@@ -1,12 +1,12 @@
 # vortex-downloader
 
-Tauri 2 desktop app wrapping a React 19 + Vite + Tailwind CSS v4 frontend. It began as a Figma Make scaffold (`.figma/` and Figma-specific Vite plugins are still present), but the real target is a desktop build driven by `src-tauri/`.
+Tauri 2 desktop app wrapping a React 19 + Vite + Tailwind CSS v4 frontend. It began as a Figma Make scaffold, but the `.figma/` folder and the Figma-specific Vite plugins have since been removed — the real target is a desktop build driven by `src-tauri/`.
 
 ## Architecture
 
 - `src/` — React frontend. `src/main.tsx` mounts `src/App.tsx`. There is **no router**: `App.tsx` is a single state-driven view that swaps pages from `src/pages/` (Home, Info, Downloads, Settings). Support files: `src/data.ts` (mocks), `src/types.ts`, `src/icons.tsx`.
 - `src-tauri/` — Rust/Tauri 2 backend. `src/main.rs` → `app_lib::run()` (`src/lib.rs`). Crate is `app`/`app_lib`, edition 2021, MSRV 1.77.2. `tauri-plugin-log` is enabled in debug builds only. `capabilities/default.json` grants `core:default` plus the plugin permission sets in use (`dialog`, `sql`, `notification`).
-- `vite.config.ts` — Vite + React + Tailwind, plus Figma Make dev-only plugins (site config, error-overlay replay, React-refresh boundary fallback, make-kit). The dev server ignores `.figma` and `src-tauri` in its watch list.
+- `vite.config.ts` — plain Vite + React + Tailwind with the `@/` alias (the Figma Make dev-only plugins are gone with `.figma/`). The dev server ignores `src-tauri` in its watch list.
 
 ## Frontend ↔ Tauri IPC
 
