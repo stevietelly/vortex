@@ -32,10 +32,10 @@ Tauri 2 desktop app wrapping a React 19 + Vite + Tailwind CSS v4 frontend. It be
 
 `.github/workflows/build.yml` runs on **push to `main`** (i.e. after a PR merges) and on `workflow_dispatch`:
 
-1. `verify` (ubuntu-22.04): apt GUI deps → `bun install --frozen-lockfile` → `bun run typecheck` → `cargo test`. The `build` job waits on it.
-2. `build` (needs `verify`): 4-way matrix — macOS aarch64 + x86_64, ubuntu-22.04, windows — each runs `tauri-apps/tauri-action@v1` (no release inputs, so it only builds) and uploads `bundle/**` as artifact `vortex-downloader-<platform>`.
+1. `verify` (ubuntu-22.04): checkout with `lfs: true` (icons are Git LFS objects and Tauri codegen reads them at compile time — without it `cargo test` fails with "Invalid PNG signature") → apt GUI deps → `bun install --frozen-lockfile` → `bun run typecheck` → `cargo test`. No frontend build needed: `cargo test` passes without `dist/`. The `build` job waits on it.
+2. `build` (needs `verify`): windows-only matrix (`windows-latest`, uploads `bundle/**` as artifact `vortex-downloader-windows-x86_64`; was a 4-way macOS/ubuntu/windows matrix until `1e107e2`) — checkout with `lfs: true`, then `tauri-apps/tauri-action@v1` (no release inputs, so it only builds).
 
-No GitHub releases/tags are created (app version is static → tag collisions); add `tagName`/`releaseName` to tauri-action once versioning exists. macOS builds are ad-hoc signed via `APPLE_SIGNING_IDENTITY: "-"`.
+No GitHub releases/tags are created (app version is static → tag collisions); add `tagName`/`releaseName` to tauri-action once versioning exists. The `APPLE_SIGNING_IDENTITY: "-"` env is kept for when macOS returns to the matrix (ad-hoc signing so Apple Silicon downloads aren't treated as "damaged").
 
 ## Build output
 
