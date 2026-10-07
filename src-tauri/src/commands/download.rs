@@ -298,9 +298,9 @@ fn is_format_error(msg: &str) -> bool {
         || m.contains("format selection")
 }
 
-/// True if the failure was a missing/incomplete ffmpeg (or ffprobe) — the
-/// next candidate may still work as a pre-merged file without merging, so the
-/// ladder gets one more try before giving up.
+/// True if the failure was a missing/incomplete ffmpeg (or ffprobe) — a
+/// pre-merged file needs no merge, so the retry jumps straight to `best`
+/// instead of re-walking the ladder.
 fn is_ffmpeg_error(msg: &str) -> bool {
     let m = msg.to_lowercase();
     (m.contains("ffmpeg") || m.contains("ffprobe"))
@@ -414,7 +414,9 @@ pub async fn start_download(
 
         let mut last_error: Option<String> = None;
 
-        for (i, fid) in candidates.iter().enumerate() {
+        let mut i = 0;
+        while i < candidates.len() {
+            let fid = &candidates[i];
             if i > 0 {
                 // Switch formats without flashing an error to the UI.
                 let _ = app2.emit(
@@ -616,12 +618,25 @@ pub async fn start_download(
             }
 
             last_error = error_msg.clone();
-            let retryable = error_msg
-                .as_ref()
-                .map(|m| is_format_error(m) || is_ffmpeg_error(m))
-                .unwrap_or(false);
-            if retryable && i + 1 < candidates.len() {
+            let (format_err, ffmpeg_err) = match error_msg.as_deref() {
+                Some(m) => (is_format_error(m), is_ffmpeg_error(m)),
+                None => (false, false),
+            };
+            if format_err && i + 1 < candidates.len() {
+                i += 1;
                 continue; // try the next candidate format
+            }
+            // An ffmpeg/merge failure hits every ladder rung the same way, and
+            // each retry would re-download the whole video just to fail at the
+            // same merge step. Jump straight to the pre-merged `best` selector
+            // for at most one retry, and never when we're already on it.
+            if ffmpeg_err && fid != "best" {
+                if let Some(pos) = candidates.iter().position(|c| c == "best") {
+                    if pos > i {
+                        i = pos;
+                        continue;
+                    }
+                }
             }
             let cancelled = app2
                 .state::<JobRegistry>()
