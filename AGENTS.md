@@ -18,7 +18,7 @@ Tauri 2 desktop app wrapping a React 19 + Vite + Tailwind CSS v4 frontend. It be
 
 ## Package manager: use bun, not pnpm
 
-`src-tauri/tauri.conf.json` sets `beforeDevCommand: "bun dev"` and `beforeBuildCommand: "bun run build"`, so the frontend must be run/installed with **bun** (`bun.lock` is the live lockfile). `pnpm-lock.yaml` and the `pnpm` entry in `.mise.toml` are stale Figma Make template leftovers — ignore them.
+`src-tauri/tauri.conf.json` sets `beforeDevCommand: "bun dev"` and `beforeBuildCommand: "bun run build"`, so the frontend must be run/installed with **bun** (`bun.lock` is the live lockfile). The stale `pnpm-lock.yaml` Figma Make leftover has been removed; the `pnpm` entry in `.mise.toml` is likewise unused — ignore it.
 
 ## Commands
 
