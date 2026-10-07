@@ -46,6 +46,17 @@ pub struct AppSettings {
     pub active_profile_id: String,
     pub ytdlp_version: Option<String>,
     pub ffmpeg_version: Option<String>,
+    #[serde(default)]
+    pub mock_mode: bool,
+    /// Show a native OS notification when a download finishes or fails.
+    /// `default_true` so settings.json files stored before this field existed
+    /// keep parsing (a missing required field would discard all user settings).
+    #[serde(default = "default_true")]
+    pub notify_on_complete: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Platform-naive defaults. Binary defaults should ultimately come from
@@ -76,6 +87,8 @@ pub fn default_settings() -> AppSettings {
         active_profile_id: String::new(),
         ytdlp_version: None,
         ffmpeg_version: None,
+        mock_mode: false,
+        notify_on_complete: true,
     }
 }
 

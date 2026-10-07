@@ -1,18 +1,32 @@
 mod commands;
 
-use tauri::Manager;
 use tauri_plugin_sql::{Builder, Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create requests and download_items tables",
-        sql: include_str!("../migrations/0001_init.sql"),
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create requests and download_items tables",
+            sql: include_str!("../migrations/0001_init.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "add start/completion timing to download_items",
+            sql: include_str!("../migrations/0002_download_timing.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "add postprocess_issues table",
+            sql: include_str!("../migrations/0003_postprocess_issues.sql"),
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             Builder::new()
                 .add_migrations("sqlite:vortex.db", migrations)

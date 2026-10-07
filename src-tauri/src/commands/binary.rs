@@ -3,6 +3,8 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use super::hide_console;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryStatus {
@@ -19,8 +21,9 @@ pub struct BinaryStatus {
 fn kill_pid(pid: u32) {
     #[cfg(windows)]
     {
-        Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F", "/T"])
+        let mut cmd = Command::new("taskkill");
+        hide_console(&mut cmd);
+        cmd.args(["/PID", &pid.to_string(), "/F", "/T"])
             .output()
             .ok();
     }
@@ -38,6 +41,7 @@ fn kill_pid(pid: u32) {
 /// binary that fails to start logs the loader error there too.
 fn run_version(path: &str) -> Result<String, String> {
     let mut cmd = Command::new(path);
+    hide_console(&mut cmd);
     cmd.arg("--version")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -46,7 +50,7 @@ fn run_version(path: &str) -> Result<String, String> {
     if let Some(dir) = std::path::Path::new(path).parent() {
         cmd.current_dir(dir);
     }
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| format!("could not start binary: {e}"))?;
     let pid = child.id();
@@ -107,7 +111,9 @@ pub fn resolve_binary(name: &str, configured: &str) -> Option<String> {
 
 #[cfg(windows)]
 fn which(name: &str) -> Option<String> {
-    let out = Command::new("where").arg(name).output().ok()?;
+    let mut cmd = Command::new("where");
+    hide_console(&mut cmd);
+    let out = cmd.arg(name).output().ok()?;
     let s = String::from_utf8_lossy(&out.stdout);
     s.lines().next().map(|l| l.trim().to_string())
 }
