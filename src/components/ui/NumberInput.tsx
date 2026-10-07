@@ -1,5 +1,4 @@
-import { AppSettings } from "@/types";
-
+import { AppSettings } from "@/types"
 
 export default function NumberInput({
   label,
@@ -10,13 +9,13 @@ export default function NumberInput({
   settings,
   onChange,
 }: {
-  label: string;
-  field: keyof AppSettings;
-  min: number;
-  max: number;
-  hint?: string;
-  settings: AppSettings;
-  onChange: (patch: Partial<AppSettings>) => void;
+  label: string
+  field: keyof AppSettings
+  min: number
+  max: number
+  hint?: string
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
 }) {
   return (
     <div>
@@ -50,5 +49,5 @@ export default function NumberInput({
         )}
       </div>
     </div>
-  );
+  )
 }

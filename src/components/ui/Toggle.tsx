@@ -1,4 +1,4 @@
-import { AppSettings } from "@/types";
+import { AppSettings } from "@/types"
 
 export default function Toggle({
   label,
@@ -7,11 +7,11 @@ export default function Toggle({
   settings,
   onChange,
 }: {
-  label: string;
-  field: keyof AppSettings;
-  hint?: string;
-  settings: AppSettings;
-  onChange: (patch: Partial<AppSettings>) => void;
+  label: string
+  field: keyof AppSettings
+  hint?: string
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -46,5 +46,5 @@ export default function Toggle({
         )}
       </div>
     </div>
-  );
+  )
 }
