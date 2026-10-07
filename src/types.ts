@@ -1,38 +1,40 @@
-export type Page = "home" | "info" | "downloads" | "settings";
-export type Format = "mp4" | "webm" | "mkv" | "mp3" | "wav" | "m4a" | "opus";
+export type Page = "home" | "info" | "downloads" | "settings"
+export type Format = "mp4" | "webm" | "mkv" | "mp3" | "wav" | "m4a" | "opus"
 
 // A named download destination the user can pick per download.
 export interface FolderProfile {
-  id: string;
-  name: string;
-  path: string;
+  id: string
+  name: string
+  path: string
 }
 
 export interface AppSettings {
-  ytdlpPath: string;
-  ffmpegPath: string;
-  downloadDir: string;
-  maxConcurrent: number;
-  defaultFormat: Format;
-  defaultQuality: string;
-  embedMetadata: boolean;
-  embedThumbnail: boolean;
-  preferFreeFormats: boolean;
-  writeSubs: boolean;
-  subLangs: string;
-  rateLimit: string;
-  proxyUrl: string;
-  cookiesFile: string;
-  cookiesBrowser: string;
-  filenameTemplate: string;
-  splitChapters: boolean;
-  keepOriginalAudio: boolean;
-  audioQuality: string;
-  checkForUpdates: boolean;
-  folderProfiles: FolderProfile[];
-  activeProfileId: string;
-  ytdlpVersion?: string;
-  ffmpegVersion?: string;
+  ytdlpPath: string
+  ffmpegPath: string
+  downloadDir: string
+  maxConcurrent: number
+  defaultFormat: Format
+  defaultQuality: string
+  embedMetadata: boolean
+  embedThumbnail: boolean
+  preferFreeFormats: boolean
+  writeSubs: boolean
+  subLangs: string
+  rateLimit: string
+  proxyUrl: string
+  cookiesFile: string
+  cookiesBrowser: string
+  filenameTemplate: string
+  splitChapters: boolean
+  keepOriginalAudio: boolean
+  audioQuality: string
+  checkForUpdates: boolean
+  folderProfiles: FolderProfile[]
+  activeProfileId: string
+  ytdlpVersion?: string
+  ffmpegVersion?: string
+  mockMode: boolean
+  notifyOnComplete: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -58,4 +60,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   checkForUpdates: true,
   folderProfiles: [],
   activeProfileId: "",
-};
+  mockMode: false,
+  notifyOnComplete: true,
+}

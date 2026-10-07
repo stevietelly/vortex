@@ -1,0 +1,137 @@
+# CI/CD: verify + build whenever a pull request lands on main (push after
+# merge), or on demand via workflow_dispatch. Produces per-platform bundles as
+# workflow artifacts — no GitHub releases/tags here (the app version is static,
+# so a tag-per-build would collide). Add release inputs to tauri-action later
+# if you start versioning.
+# Docs: https://tauri.app/distribute/pipelines/github/
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to main supersedes an in-flight run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast gates: typecheck + Rust unit tests. Builds wait on this so broken
+  # PRs fail in ~2 min instead of burning 4x build minutes.
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # cargo test links the Tauri stack (wry/webkit2gtk), so the Linux GUI
+      # dev packages are required even for tests, not just full builds.
+      - name: install dependencies (ubuntu only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: typecheck
+        run: bun run typecheck
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Rust tests
+        run: cargo test --quiet
+        working-directory: src-tauri
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            name: macos-aarch64
+            bundlePath: src-tauri/target/aarch64-apple-darwin/release/bundle
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            name: macos-x86_64
+            bundlePath: src-tauri/target/x86_64-apple-darwin/release/bundle
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            name: linux-x86_64
+            bundlePath: src-tauri/target/release/bundle
+            args: ''
+          - platform: windows-latest
+            name: windows-x86_64
+            bundlePath: src-tauri/target/release/bundle
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Only meaningful on the macOS runners; empty elsewhere.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      # Runs `tauri build` (and beforeBuildCommand `bun run build`).
+      # No tagName/releaseName → builds only, no GitHub release is created.
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ad-hoc sign on macOS so downloads from artifacts aren't treated as
+          # "damaged" on Apple Silicon (no Apple certificate in CI).
+          # https://tauri.app/distribute/sign/macos/#ad-hoc-signing
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          args: ${{ matrix.args }}
+
+      - name: upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-downloader-${{ matrix.name }}
+          path: ${{ matrix.bundlePath }}
+          if-no-files-found: error

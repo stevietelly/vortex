@@ -1,5 +1,4 @@
-import { AppSettings } from "@/types";
-
+import { AppSettings } from "@/types"
 
 export default function SelectInput({
   label,
@@ -9,12 +8,12 @@ export default function SelectInput({
   settings,
   onChange,
 }: {
-  label: string;
-  field: keyof AppSettings;
-  options: { value: string; label: string }[];
-  hint?: string;
-  settings: AppSettings;
-  onChange: (patch: Partial<AppSettings>) => void;
+  label: string
+  field: keyof AppSettings
+  options: { value: string; label: string }[]
+  hint?: string
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
 }) {
   return (
     <div>
@@ -49,5 +48,5 @@ export default function SelectInput({
         </p>
       )}
     </div>
-  );
+  )
 }

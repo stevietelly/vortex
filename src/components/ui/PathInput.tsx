@@ -1,6 +1,6 @@
-import { IconFolder } from "@/icons";
-import { pickPath } from "@/lib/tauri";
-import type { AppSettings } from "@/types";
+import { IconFolder } from "@/icons"
+import { pickPath } from "@/lib/tauri"
+import type { AppSettings } from "@/types"
 
 export default function PathInput({
   label,
@@ -11,23 +11,29 @@ export default function PathInput({
   onChange,
   browse,
 }: {
-  label: string;
-  field: keyof AppSettings;
-  placeholder: string;
-  hint?: string;
-  settings: AppSettings;
-  onChange: (patch: Partial<AppSettings>) => void;
-  browse?: { directory?: boolean; extensions?: string[] };
+  label: string
+  field: keyof AppSettings
+  placeholder: string
+  hint?: string
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
+  browse?: { directory?: boolean; extensions?: string[] }
 }) {
   return (
     <div>
-      <label className="mono text-[10px] uppercase tracking-widest block mb-1.5" style={{ color: "var(--muted-foreground)" }}>
+      <label
+        className="mono text-[10px] uppercase tracking-widest block mb-1.5"
+        style={{ color: "var(--muted-foreground)" }}
+      >
         {label}
       </label>
       <div className="flex gap-2">
         <div
           className="flex-1 flex items-center rounded border overflow-hidden"
-          style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+          style={{
+            backgroundColor: "var(--background)",
+            borderColor: "var(--border)",
+          }}
         >
           <input
             type="text"
@@ -42,17 +48,28 @@ export default function PathInput({
         <button
           type="button"
           onClick={async () => {
-            const picked = await pickPath(browse);
-            if (picked) onChange({ [field]: picked });
+            const picked = await pickPath(browse)
+            if (picked) onChange({ [field]: picked })
           }}
           className="flex items-center gap-1.5 px-3 py-2 rounded border text-xs transition-colors cursor-pointer flex-shrink-0"
-          style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", backgroundColor: "var(--card)" }}
+          style={{
+            borderColor: "var(--border)",
+            color: "var(--muted-foreground)",
+            backgroundColor: "var(--card)",
+          }}
         >
           <IconFolder size={13} />
           Browse
         </button>
       </div>
-      {hint && <p className="mono text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>{hint}</p>}
+      {hint && (
+        <p
+          className="mono text-[10px] mt-1"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          {hint}
+        </p>
+      )}
     </div>
-  );
+  )
 }

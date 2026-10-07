@@ -9,6 +9,7 @@ use tauri::Emitter;
 use tauri::Manager;
 
 use crate::commands::binary;
+use crate::commands::hide_console;
 use crate::commands::settings;
 
 /// Tracks in-flight download child processes by job id (stores the OS pid so
@@ -89,8 +90,6 @@ impl Drop for GateGuard {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum DownloadStatus {
-    Queued,
-    FetchingMetadata,
     Downloading,
     Merging,
     Done,
@@ -113,6 +112,129 @@ pub struct DownloadProgress {
     pub format_id: Option<String>,
 }
 
+/// One WARNING/ERROR line reported by yt-dlp, classified so the frontend can
+/// tell the user what to fix (e.g. `ffmpeg-missing` → point at Settings).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PostprocessIssue {
+    pub level: String, // "warning" | "error"
+    pub stage: String, // "postprocess" | "format" | "network" | "access" | "storage" | "download" | "general"
+    pub code: String,  // machine-readable fix key
+    pub message: String,
+}
+
+/// Emitted once a job's process exits, listing everything worth fixing.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PostprocessReport {
+    pub id: String,
+    pub issues: Vec<PostprocessIssue>,
+}
+
+/// Classify a raw yt-dlp output line into an issue. Returns None for lines
+/// that aren't WARNING/ERROR entries.
+fn classify_issue(line: &str) -> Option<PostprocessIssue> {
+    let (level, msg) = if let Some(rest) = line.strip_prefix("ERROR:") {
+        ("error", rest.trim())
+    } else if let Some(rest) = line.strip_prefix("WARNING:") {
+        ("warning", rest.trim())
+    } else {
+        return None;
+    };
+    if msg.is_empty() {
+        return None;
+    }
+    let lower = msg.to_lowercase();
+    let has_ffmpeg_problem = |word: &str| {
+        lower.contains(word)
+            && (lower.contains("not found")
+                || lower.contains("no such")
+                || lower.contains("not exist")
+                || lower.contains("not installed")
+                || lower.contains("unable")
+                || lower.contains("failed")
+                || lower.contains("is not recognized")
+                || lower.contains("errno 2"))
+    };
+    let code = if lower.contains("pre-merged")
+        || lower.contains("selects the best")
+        || lower.contains("\"-f best\"")
+    {
+        // Advisory about the `-f best` selector — not a merge failure.
+        "format-selector"
+    } else if lower.contains("javascript runtime")
+        || lower.contains("js runtime")
+        || lower.contains("--js-runtimes")
+    {
+        "js-runtime"
+    } else if has_ffmpeg_problem("ffprobe") {
+        "ffprobe-missing"
+    } else if has_ffmpeg_problem("ffmpeg") {
+        "ffmpeg-missing"
+    } else if lower.contains("requested format is not available")
+        || lower.contains("format not available")
+        || lower.contains("requested format not")
+    {
+        "format-unavailable"
+    } else if lower.contains("merge") || lower.contains("merger") {
+        "merge-failed"
+    } else if lower.contains("postprocess") || lower.contains("post-processing") {
+        "postprocess-failed"
+    } else if lower.contains("subtitle") {
+        "subtitle-failed"
+    } else if lower.contains("embed") {
+        "embed-failed"
+    } else if lower.contains("http error")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("connection")
+        || lower.contains("network")
+        || lower.contains("temporary failure")
+    {
+        "network-error"
+    } else if lower.contains("sign in")
+        || lower.contains("confirm you")
+        || lower.contains("not a bot")
+        || lower.contains("cookies")
+        || lower.contains("login")
+        || lower.contains("authentication")
+    {
+        "auth-required"
+    } else if lower.contains("geo") || lower.contains("not available in your country") {
+        "geo-blocked"
+    } else if lower.contains("no space") || lower.contains("disk") || lower.contains("errno 28") {
+        "disk-full"
+    } else if lower.contains("private video") || lower.contains("video unavailable") {
+        "unavailable"
+    } else if level == "error" {
+        "download-failed"
+    } else {
+        "general"
+    };
+    let stage = match code {
+        "ffmpeg-missing" | "ffprobe-missing" | "merge-failed" | "postprocess-failed"
+        | "subtitle-failed" | "embed-failed" => "postprocess",
+        "format-unavailable" | "format-selector" => "format",
+        "js-runtime" => "metadata",
+        "network-error" => "network",
+        "auth-required" | "geo-blocked" | "unavailable" => "access",
+        "disk-full" => "storage",
+        _ => {
+            if level == "error" {
+                "download"
+            } else {
+                "general"
+            }
+        }
+    };
+    Some(PostprocessIssue {
+        level: level.to_string(),
+        stage: stage.to_string(),
+        code: code.to_string(),
+        message: msg.to_string(),
+    })
+}
+
 fn expand_path(p: &str) -> String {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -128,8 +250,9 @@ fn expand_path(p: &str) -> String {
 
 fn kill_pid(pid: u32) {
     if cfg!(windows) {
-        std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F", "/T"])
+        let mut cmd = std::process::Command::new("taskkill");
+        hide_console(&mut cmd);
+        cmd.args(["/PID", &pid.to_string(), "/F", "/T"])
             .output()
             .ok();
     } else {
@@ -173,6 +296,20 @@ fn is_format_error(msg: &str) -> bool {
         || m.contains("has no video")
         || m.contains("no format")
         || m.contains("format selection")
+}
+
+/// True if the failure was a missing/incomplete ffmpeg (or ffprobe) — a
+/// pre-merged file needs no merge, so the retry jumps straight to `best`
+/// instead of re-walking the ladder.
+fn is_ffmpeg_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    (m.contains("ffmpeg") || m.contains("ffprobe"))
+        && (m.contains("not found")
+            || m.contains("not installed")
+            || m.contains("without")
+            || m.contains("no such")
+            || m.contains("failed")
+            || m.contains("is not recognized"))
 }
 
 /// Start a download. Spawns yt-dlp in a background thread, parses its
@@ -266,13 +403,20 @@ pub async fn start_download(
         if candidates.first() != Some(&format_id) {
             candidates.insert(0, format_id.clone());
         }
-        if candidates.last() != Some(&"best".to_string()) {
-            candidates.push("best".to_string());
+        // Always end with the merge-based and pre-merged fallbacks: a plain
+        // `-f best` can fail outright on adaptive-only videos, while the
+        // merge selector needs ffmpeg — between them one of them works.
+        for extra in ["bestvideo*+bestaudio/best", "best"] {
+            if !candidates.iter().any(|c| c == extra) {
+                candidates.push(extra.to_string());
+            }
         }
 
         let mut last_error: Option<String> = None;
 
-        for (i, fid) in candidates.iter().enumerate() {
+        let mut i = 0;
+        while i < candidates.len() {
+            let fid = &candidates[i];
             if i > 0 {
                 // Switch formats without flashing an error to the UI.
                 let _ = app2.emit(
@@ -291,6 +435,7 @@ pub async fn start_download(
             }
 
             let mut cmd = std::process::Command::new(&ytdlp);
+            hide_console(&mut cmd);
             cmd.arg("--ignore-config")
                 .arg("-f")
                 .arg(fid)
@@ -299,6 +444,10 @@ pub async fn start_download(
                 .arg("--newline");
             if let Some(n) = playlist_items {
                 cmd.arg("--playlist-items").arg(n.to_string());
+                // Also stop enumeration at this entry: a YouTube Mix/radio
+                // (list=RD...) has no end, so yt-dlp would keep paging the
+                // list forever before reaching item n.
+                cmd.arg("--playlist-end").arg(n.to_string());
             } else {
                 cmd.arg("--no-playlist");
             }
@@ -350,15 +499,24 @@ pub async fn start_download(
 
             // Capture stderr so we can surface the real yt-dlp failure reason
             // (format unavailable / private / geo-blocked / disk full / merge
-            // failure) instead of a generic "Download failed".
+            // failure) instead of a generic "Download failed". WARNING/ERROR
+            // lines are also classified into postprocess issues.
             let err_buf = Arc::new(Mutex::new(String::new()));
+            let issues: Arc<Mutex<Vec<PostprocessIssue>>> = Arc::new(Mutex::new(Vec::new()));
             let stderr_handle = child.stderr.take().map(|stderr| {
                 let err_buf = err_buf.clone();
+                let issues = issues.clone();
                 std::thread::spawn(move || {
                     let reader = std::io::BufReader::new(stderr);
                     for line in reader.lines().flatten() {
                         if let Some(msg) = line.strip_prefix("ERROR:") {
                             *err_buf.lock().unwrap() = msg.trim().to_string();
+                        }
+                        if let Some(issue) = classify_issue(&line) {
+                            let mut list = issues.lock().unwrap();
+                            if !list.iter().any(|i| i.message == issue.message) {
+                                list.push(issue);
+                            }
                         }
                     }
                 })
@@ -370,6 +528,11 @@ pub async fn start_download(
                 for line in reader.lines().flatten() {
                     if let Some(dest) = line.strip_prefix("[download] Destination: ") {
                         output_path = Some(dest.trim().to_string());
+                    } else if let Some(issue) = classify_issue(&line) {
+                        let mut list = issues.lock().unwrap();
+                        if !list.iter().any(|i| i.message == issue.message) {
+                            list.push(issue);
+                        }
                     } else if line.contains("Merg") {
                         let _ = app2.emit(
                             "download-progress",
@@ -417,6 +580,21 @@ pub async fn start_download(
                 })
             };
 
+            // Hand everything worth fixing to the frontend (it persists the
+            // report against the job's item so failures stay diagnosable).
+            {
+                let list = issues.lock().unwrap();
+                if !list.is_empty() {
+                    let _ = app2.emit(
+                        "postprocess-issues",
+                        PostprocessReport {
+                            id: id_for_thread.clone(),
+                            issues: list.clone(),
+                        },
+                    );
+                }
+            }
+
             if status {
                 let _ = app2.emit(
                     "download-progress",
@@ -440,12 +618,25 @@ pub async fn start_download(
             }
 
             last_error = error_msg.clone();
-            let is_format_err = error_msg
-                .as_ref()
-                .map(|m| is_format_error(m))
-                .unwrap_or(false);
-            if is_format_err && i + 1 < candidates.len() {
+            let (format_err, ffmpeg_err) = match error_msg.as_deref() {
+                Some(m) => (is_format_error(m), is_ffmpeg_error(m)),
+                None => (false, false),
+            };
+            if format_err && i + 1 < candidates.len() {
+                i += 1;
                 continue; // try the next candidate format
+            }
+            // An ffmpeg/merge failure hits every ladder rung the same way, and
+            // each retry would re-download the whole video just to fail at the
+            // same merge step. Jump straight to the pre-merged `best` selector
+            // for at most one retry, and never when we're already on it.
+            if ffmpeg_err && fid != "best" {
+                if let Some(pos) = candidates.iter().position(|c| c == "best") {
+                    if pos > i {
+                        i = pos;
+                        continue;
+                    }
+                }
             }
             let cancelled = app2
                 .state::<JobRegistry>()
@@ -543,4 +734,71 @@ pub fn cancel_download(
         },
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn code_of(line: &str) -> String {
+        classify_issue(line).expect("should classify").code
+    }
+
+    #[test]
+    fn best_selector_advisory_is_not_a_merge_failure() {
+        // This exact line was stored as "merge-failed" before.
+        assert_eq!(
+            code_of(
+                r#"WARNING: "-f best" selects the best pre-merged format which is often not the best option."#
+            ),
+            "format-selector"
+        );
+    }
+
+    #[test]
+    fn js_runtime_warning_gets_its_own_code() {
+        assert_eq!(
+            code_of("WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default"),
+            "js-runtime"
+        );
+    }
+
+    #[test]
+    fn ffprobe_message_is_classified_as_ffprobe_missing() {
+        assert_eq!(
+            code_of("ERROR: Unable to extract metadata: ffprobe not found. Install it or pass --ffmpeg-location"),
+            "ffprobe-missing"
+        );
+    }
+
+    #[test]
+    fn format_and_merge_errors_keep_their_codes() {
+        assert_eq!(
+            code_of("ERROR: [youtube] s3a4OQR-10M: Requested format is not available. Use --list-formats for a list of available formats"),
+            "format-unavailable"
+        );
+        assert_eq!(
+            code_of("ERROR: Postprocessing: ffmpeg not found"),
+            "ffmpeg-missing"
+        );
+    }
+
+    #[test]
+    fn unknown_lines_are_ignored() {
+        assert!(classify_info_is_none());
+    }
+
+    fn classify_info_is_none() -> bool {
+        classify_issue("[youtube] Extracting URL: https://youtu.be/x").is_none()
+            && classify_issue("WARNING: ").is_none()
+    }
+
+    #[test]
+    fn ffmpeg_and_format_failures_are_retryable() {
+        assert!(is_ffmpeg_error("Postprocessing: ffmpeg not found"));
+        assert!(is_format_error(
+            "Requested format is not available. Use --list-formats"
+        ));
+        assert!(!is_ffmpeg_error("HTTP Error 403: Forbidden"));
+    }
 }
