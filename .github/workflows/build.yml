@@ -27,7 +27,12 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
+      # Icons live in Git LFS (*.png/*.ico) and Tauri's codegen reads them at
+      # compile time — without this the checkout holds pointer files and
+      # cargo test fails with "Invalid PNG signature".
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       # cargo test links the Tauri stack (wry/webkit2gtk), so the Linux GUI
       # dev packages are required even for tests, not just full builds.
@@ -77,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          lfs: true  
+          lfs: true
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
