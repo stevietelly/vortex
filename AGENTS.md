@@ -26,7 +26,7 @@ Tauri 2 desktop app wrapping a React 19 + Vite + Tailwind CSS v4 frontend. It be
 - Desktop dev: `bun tauri dev` — runs `bun dev`, then launches the Rust app and loads `http://localhost:8443` in a webview.
 - Frontend build: `bun build` (= `vite build`).
 - Desktop build: `bun tauri build`.
-- Format: `bun run format` (oxfmt). Type-check with `bun run typecheck` (must stay clean; `src/App.old.tsx` is excluded in `tsconfig.json`). Rust tests: `cargo test` in `src-tauri` (13 unit tests). No linter is configured.
+- Format: `bun run format` (oxfmt). Type-check with `bun run typecheck` (must stay clean; `src/App.old.tsx` is excluded in `tsconfig.json`). Rust tests: `cargo test` in `src-tauri` (14 unit tests). No linter is configured.
 
 ## CI (GitHub Actions)
 

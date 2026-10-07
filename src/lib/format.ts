@@ -47,6 +47,9 @@ export function buildFallbackChain(
   selectedId: string,
 ): string[] {
   const selected = formats.find((f) => f.id === selectedId)
+  // An audio-only selection must never fall back to video formats — build the
+  // ladder only for selections that actually include video.
+  if (selected && !selected.hasVideo) return [selectedId]
   const video = formats.filter((f) => f.hasVideo && f.id !== "bestaudio/best")
   const others = video
     .filter((f) => f.id !== selectedId)

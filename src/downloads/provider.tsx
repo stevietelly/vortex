@@ -142,36 +142,45 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         index?: number;
         jobId?: string;
       }): Promise<void> => {
+        // Register the job BEFORE start_download: the backend thread can emit
+        // progress events the moment it spawns, and applyProgress drops
+        // events for ids it doesn't know about yet.
+        const startedAt = Date.now();
+        const id =
+          o.jobId ??
+          `dl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        addJob(metadata, o.formatId, id, reqId);
+        registerJobMeta(id, {
+          requestId: reqId,
+          url: o.url,
+          title: o.title,
+          index: o.index,
+          formatId: o.formatId,
+          outputDir: dir,
+          addedAt: startedAt,
+          startedAt,
+        });
         try {
-          const id = settings.mockMode
-            ? mockStartDownload({
-                url: o.url,
-                formatId: o.formatId,
-                title: o.title,
-                index: o.index,
-                downloadDir: dir,
-              })
-            : await invoke<string>("start_download", {
-                url: o.url,
-                formatId: o.formatId,
-                fallbackFormatIds,
-                playlistItems: o.index ?? null,
-                resume: null,
-                jobId: o.jobId ?? null,
-                downloadDir: dir,
-              });
-          const startedAt = Date.now();
-          addJob(metadata, o.formatId, id, reqId);
-          registerJobMeta(id, {
-            requestId: reqId,
-            url: o.url,
-            title: o.title,
-            index: o.index,
-            formatId: o.formatId,
-            outputDir: dir,
-            addedAt: startedAt,
-            startedAt,
-          });
+          if (settings.mockMode) {
+            mockStartDownload({
+              url: o.url,
+              formatId: o.formatId,
+              title: o.title,
+              index: o.index,
+              downloadDir: dir,
+              jobId: id,
+            });
+          } else {
+            await invoke<string>("start_download", {
+              url: o.url,
+              formatId: o.formatId,
+              fallbackFormatIds,
+              playlistItems: o.index ?? null,
+              resume: null,
+              jobId: id,
+              downloadDir: dir,
+            });
+          }
           await upsertDownloadItem({
             id,
             requestId: reqId,
@@ -187,8 +196,8 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
             updatedAt: startedAt,
           });
         } catch (e) {
-          const id = `err-${Date.now()}`;
-          addJob(metadata, o.formatId, id, reqId);
+          // The job is already registered under `id` — mark that one failed
+          // instead of adding a second, separate error job.
           applyProgress({
             id,
             status: "error",
@@ -198,13 +207,18 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      if (metadata.isPlaylist && opts?.downloadAll && entries.length) {
-        for (const entry of entries) {
+      if (metadata.isPlaylist && opts?.downloadAll) {
+        // Schedule the reported playlist total, not just the capped preview
+        // entries: the backend extracts entry N straight from the playlist
+        // URL, so entries beyond the preview still download fine.
+        const total = metadata.playlistCount ?? entries.length;
+        for (let idx = 1; idx <= total; idx++) {
+          const entry = entries.find((e) => e.index === idx);
           await startOne({
             url: metadata.url,
             formatId,
-            title: entry.title,
-            index: entry.index,
+            title: entry?.title ?? `${metadata.title} #${idx}`,
+            index: idx,
           });
         }
       } else {
@@ -232,37 +246,48 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         isPlaylist: item.index !== undefined,
       };
       const dir = item.outputDir?.trim() ? item.outputDir : settings.downloadDir;
+      // Register before start_download for the same reason as startOne — and
+      // on resume the id is already known: it's the existing item's id.
+      addJob(meta, item.formatId, item.id, item.requestId);
+      registerJobMeta(item.id, {
+        requestId: item.requestId,
+        url: item.url,
+        title: item.title,
+        index: item.index,
+        formatId: item.formatId,
+        outputDir: dir,
+        addedAt: item.addedAt,
+        startedAt: Date.now(),
+      });
       try {
-        const id = settings.mockMode
-          ? mockStartDownload({
-              url: item.url,
-              formatId: item.formatId,
-              title: item.title,
-              index: item.index,
-              downloadDir: dir,
-            })
-          : await invoke<string>("start_download", {
-              url: item.url,
-              formatId: item.formatId,
-              fallbackFormatIds: [],
-              playlistItems: item.index ?? null,
-              resume: true,
-              jobId: item.id,
-              downloadDir: dir,
-            });
-        registerJobMeta(id, {
-          requestId: item.requestId,
-          url: item.url,
-          title: item.title,
-          index: item.index,
-          formatId: item.formatId,
-          outputDir: dir,
-          addedAt: item.addedAt,
-          startedAt: Date.now(),
+        if (settings.mockMode) {
+          mockStartDownload({
+            url: item.url,
+            formatId: item.formatId,
+            title: item.title,
+            index: item.index,
+            downloadDir: dir,
+            jobId: item.id,
+          });
+        } else {
+          await invoke<string>("start_download", {
+            url: item.url,
+            formatId: item.formatId,
+            fallbackFormatIds: [],
+            playlistItems: item.index ?? null,
+            resume: true,
+            jobId: item.id,
+            downloadDir: dir,
+          });
+        }
+      } catch (e) {
+        // Registered above — update it instead of leaving a queued zombie.
+        applyProgress({
+          id: item.id,
+          status: "error",
+          progress: 0,
+          error: e instanceof Error ? e.message : String(e),
         });
-        addJob(meta, item.formatId, id, item.requestId);
-      } catch {
-        /* ignore individual resume failures */
       }
     },
     [settings.downloadDir, settings.mockMode],

@@ -376,11 +376,15 @@ pub fn map_metadata(url: &str, info: &serde_json::Value) -> VideoMetadata {
             .to_string(),
         is_playlist: playlist,
         playlist_count: if playlist {
-            Some(entries.as_ref().map(|e| e.len() as u32).unwrap_or_else(|| {
-                info.get("playlist_count")
-                    .and_then(|c| c.as_u64())
-                    .unwrap_or(0) as u32
-            }))
+            // Prefer the count yt-dlp reports for the whole playlist, but
+            // never claim fewer entries than the ones actually fetched (the
+            // preview is capped at PLAYLIST_ENTRY_LIMIT).
+            let fetched = entries.as_ref().map(|e| e.len() as u32).unwrap_or(0);
+            let reported = info
+                .get("playlist_count")
+                .and_then(|c| c.as_u64())
+                .unwrap_or(0) as u32;
+            Some(reported.max(fetched))
         } else {
             None
         },
@@ -561,6 +565,38 @@ mod tests {
         let top = out.iter().find(|f| f.height == Some(720)).unwrap();
         assert_eq!(top.filesize, Some(11_237_381 + 3_133_552));
         assert!(!top.size_approx);
+    }
+
+    #[test]
+    fn playlist_count_prefers_reported_total_but_never_undercounts() {
+        let entries = || {
+            serde_json::json!([
+                {"id": "a", "title": "v1"},
+                {"id": "b", "title": "v2"},
+                {"id": "c", "title": "v3"}
+            ])
+        };
+
+        // Reported total wins when the preview fetch was capped below it.
+        let fx = serde_json::json!({
+            "_type": "playlist", "id": "pl", "title": "t",
+            "playlist_count": 500, "entries": entries(),
+        });
+        assert_eq!(map_metadata("u", &fx).playlist_count, Some(500));
+
+        // No usable reported count → fall back to what we fetched.
+        let fx = serde_json::json!({
+            "_type": "playlist", "id": "pl", "title": "t",
+            "entries": entries(),
+        });
+        assert_eq!(map_metadata("u", &fx).playlist_count, Some(3));
+
+        // A bogus reported count must never undercut the fetched entries.
+        let fx = serde_json::json!({
+            "_type": "playlist", "id": "pl", "title": "t",
+            "playlist_count": 2, "entries": entries(),
+        });
+        assert_eq!(map_metadata("u", &fx).playlist_count, Some(3));
     }
 
     #[test]
