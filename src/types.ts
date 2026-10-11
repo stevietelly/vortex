@@ -8,6 +8,18 @@ export interface FolderProfile {
   path: string
 }
 
+// Domain-bound download destination: URLs whose host matches `domain` (or any
+// of its subdomains) save into `path`. The domain is derived once from a URL
+// at creation (and doubles as the default title); the domain binding itself is
+// never rendered or editable afterwards — title and path are, and deleting the
+// location is how you unbind it.
+export interface SaveLocation {
+  id: string
+  title: string
+  path: string
+  domain: string
+}
+
 export interface AppSettings {
   ytdlpPath: string
   ffmpegPath: string
@@ -30,11 +42,15 @@ export interface AppSettings {
   audioQuality: string
   checkForUpdates: boolean
   folderProfiles: FolderProfile[]
+  saveLocations: SaveLocation[]
   activeProfileId: string
   ytdlpVersion?: string
   ffmpegVersion?: string
   mockMode: boolean
   notifyOnComplete: boolean
+  // Bring the window into view when a metadata fetch finishes (if it isn't
+  // already); on failure, show a notification instead of pulling focus.
+  focusOnFetch: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -59,7 +75,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioQuality: "192",
   checkForUpdates: true,
   folderProfiles: [],
+  saveLocations: [],
   activeProfileId: "",
   mockMode: false,
   notifyOnComplete: true,
+  focusOnFetch: true,
 }

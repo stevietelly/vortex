@@ -1,12 +1,33 @@
 import { useEffect, useState } from "react"
 import { IconX, IconTray, IconLink } from "../icons"
 import type { RequestRecord, DownloadItem } from "@/types/domain"
+import type { SaveLocation } from "@/types"
 import { STATE_LABEL, STATE_COLOR } from "@/utils"
 import DownloadRow from "@/components/ui/DownloadRow"
 import { useRequests, loadRequests, clearRequests } from "@/lib/requests"
 import { listDownloadItems } from "@/lib/db"
+import { domainFromInput } from "@/lib/saveLocations"
+import { pickPath } from "@/lib/tauri"
 import { useDownloads } from "@/downloads/provider"
 import { useRouter } from "@/router/provider"
+
+const inputCls = "w-full px-3 py-2 text-xs rounded border outline-none mono"
+const inputStyle = {
+  backgroundColor: "var(--background)",
+  borderColor: "var(--border)",
+  color: "var(--foreground)",
+  caretColor: "var(--primary)",
+}
+const labelCls =
+  "mono text-[10px] uppercase tracking-widest block mb-1.5"
+const labelStyle = { color: "var(--muted-foreground)" }
+const ghostBtnCls =
+  "text-xs px-3 py-2 rounded border cursor-pointer flex-shrink-0"
+const ghostBtnStyle = {
+  borderColor: "var(--border)",
+  color: "var(--muted-foreground)",
+  backgroundColor: "var(--card)",
+}
 
 function RequestRow({
   r,
@@ -189,6 +210,281 @@ function RequestRow({
   )
 }
 
+/**
+ * Domain → folder routing managed on the Downloads page. Adding pastes a URL;
+ * its domain is captured once (as the default title) and never shown or
+ * editable afterwards — the binding is immutable, and removing the location
+ * unbinds it. Title and folder stay editable.
+ */
+function SaveLocationsSection() {
+  const { settings, updateSettings } = useDownloads()
+  const [url, setUrl] = useState("")
+  const [title, setTitle] = useState("")
+  const [path, setPath] = useState("")
+  const [error, setError] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState("")
+  const [editPath, setEditPath] = useState("")
+
+  const domain = domainFromInput(url)
+
+  const persist = (next: SaveLocation[]) =>
+    updateSettings({ saveLocations: next })
+
+  const add = () => {
+    if (!domain) {
+      setError("Enter a valid URL or domain")
+      return
+    }
+    if (!path.trim()) {
+      setError("Pick a folder for this save location")
+      return
+    }
+    if (settings.saveLocations.some((l) => l.domain === domain)) {
+      setError(`${domain} already has a save location — edit it below`)
+      return
+    }
+    const id = crypto.randomUUID?.() ?? `sl-${Date.now()}`
+    persist([
+      ...settings.saveLocations,
+      { id, title: title.trim() || domain, path: path.trim(), domain },
+    ])
+    setUrl("")
+    setTitle("")
+    setPath("")
+    setError("")
+  }
+
+  const startEdit = (l: SaveLocation) => {
+    setEditingId(l.id)
+    setEditTitle(l.title)
+    setEditPath(l.path)
+    setError("")
+  }
+
+  const commitEdit = () => {
+    if (!editTitle.trim()) {
+      setError("Title can't be blank")
+      return
+    }
+    if (!editPath.trim()) {
+      setError("Pick a folder for this save location")
+      return
+    }
+    persist(
+      settings.saveLocations.map((l) =>
+        l.id === editingId
+          ? { ...l, title: editTitle.trim(), path: editPath.trim() }
+          : l,
+      ),
+    )
+    setError("")
+    setEditingId(null)
+  }
+
+  return (
+    <div className="mt-6">
+      <div
+        className="mono text-[10px] uppercase tracking-widest mb-2"
+        style={labelStyle}
+      >
+        Save locations
+      </div>
+      <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
+        Paste a link to bind its site to a folder — downloads from that domain
+        (and its subdomains) save there automatically; everything else uses the
+        default download directory. The domain stays hidden behind the title;
+        remove a location to unbind it. A folder profile picked on the download
+        screen still wins.
+      </p>
+
+      {settings.saveLocations.length > 0 && (
+        <div
+          className="rounded-lg border overflow-hidden mb-3"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {settings.saveLocations.map((l) =>
+            editingId === l.id ? (
+              <div
+                key={l.id}
+                className="px-3 py-2.5 border-b last:border-b-0 space-y-2"
+                style={{ backgroundColor: "var(--muted)" }}
+              >
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Title"
+                    className={inputCls}
+                    style={inputStyle}
+                    spellCheck={false}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editPath}
+                      onChange={(e) => setEditPath(e.target.value)}
+                      placeholder="Folder"
+                      className={inputCls}
+                      style={inputStyle}
+                      spellCheck={false}
+                    />
+                    <button
+                      onClick={async () => {
+                        const p = await pickPath({ directory: true })
+                        if (p) setEditPath(p)
+                      }}
+                      className={ghostBtnCls}
+                      style={ghostBtnStyle}
+                    >
+                      Browse
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="text-[10px] px-2 py-1 rounded border cursor-pointer"
+                    style={{ ...ghostBtnStyle, backgroundColor: "transparent" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={commitEdit}
+                    className="text-[10px] px-3 py-1 rounded font-medium cursor-pointer"
+                    style={{
+                      backgroundColor: "var(--primary)",
+                      color: "var(--primary-foreground)",
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                key={l.id}
+                className="flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0"
+                style={{ backgroundColor: "var(--card)" }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-sm font-medium truncate"
+                    style={{ color: "var(--foreground)" }}
+                  >
+                    {l.title}
+                  </div>
+                  <div
+                    className="mono text-[10px] truncate"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    {l.path}
+                  </div>
+                </div>
+                <button
+                  onClick={() => startEdit(l)}
+                  className="text-[10px] px-2 py-1 rounded border cursor-pointer"
+                  style={ghostBtnStyle}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() =>
+                    persist(settings.saveLocations.filter((x) => x.id !== l.id))
+                  }
+                  className="text-[10px] px-2 py-1 rounded border cursor-pointer"
+                  style={{ borderColor: "var(--border)", color: "#EF4444" }}
+                >
+                  Remove
+                </button>
+              </div>
+            ),
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label className={labelCls} style={labelStyle}>
+            URL or domain
+          </label>
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              setError("")
+            }}
+            placeholder="https://www.youtube.com/watch?v=…"
+            className={inputCls}
+            style={inputStyle}
+            spellCheck={false}
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={labelStyle}>
+            Title
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={domain || "youtube.com"}
+            className={inputCls}
+            style={inputStyle}
+            spellCheck={false}
+          />
+        </div>
+      </div>
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <label className={labelCls} style={labelStyle}>
+            Folder
+          </label>
+          <input
+            type="text"
+            value={path}
+            onChange={(e) => {
+              setPath(e.target.value)
+              setError("")
+            }}
+            placeholder="C:\Users\You\Videos\YouTube"
+            className={inputCls}
+            style={inputStyle}
+            spellCheck={false}
+          />
+        </div>
+        <button
+          onClick={async () => {
+            const p = await pickPath({ directory: true })
+            if (p) setPath(p)
+          }}
+          className={ghostBtnCls}
+          style={ghostBtnStyle}
+        >
+          Browse
+        </button>
+        <button
+          onClick={add}
+          className="text-xs px-4 py-2 rounded font-medium cursor-pointer flex-shrink-0"
+          style={{
+            backgroundColor: "var(--primary)",
+            color: "var(--primary-foreground)",
+          }}
+        >
+          Add
+        </button>
+      </div>
+      {error && (
+        <div className="mt-2 text-[11px]" style={{ color: "#EF4444" }}>
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DownloadsPage() {
   const { jobs, removeJob, clearFinished, resumeItem } = useDownloads()
   const { navigate } = useRouter()
@@ -211,30 +507,33 @@ export default function DownloadsPage() {
 
   if (jobs.length === 0 && requests.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-full px-6 py-24 gap-4">
-        <div
-          className="w-14 h-14 rounded-xl flex items-center justify-center"
-          style={{
-            backgroundColor: "var(--muted)",
-            color: "var(--muted-foreground)",
-          }}
-        >
-          <IconTray size={24} />
-        </div>
-        <div className="text-center">
+      <div className="max-w-3xl mx-auto px-6 py-6">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] px-6 py-16 gap-4">
           <div
-            className="text-sm font-medium"
-            style={{ color: "var(--foreground)" }}
+            className="w-14 h-14 rounded-xl flex items-center justify-center"
+            style={{
+              backgroundColor: "var(--muted)",
+              color: "var(--muted-foreground)",
+            }}
           >
-            No downloads yet
+            <IconTray size={24} />
           </div>
-          <div
-            className="text-xs mt-1"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Downloads will appear here as they start
+          <div className="text-center">
+            <div
+              className="text-sm font-medium"
+              style={{ color: "var(--foreground)" }}
+            >
+              No downloads yet
+            </div>
+            <div
+              className="text-xs mt-1"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Downloads will appear here as they start
+            </div>
           </div>
         </div>
+        <SaveLocationsSection />
       </div>
     )
   }
@@ -365,6 +664,8 @@ export default function DownloadsPage() {
           </div>
         </div>
       )}
+
+      <SaveLocationsSection />
     </div>
   )
 }
