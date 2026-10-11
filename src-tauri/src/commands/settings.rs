@@ -15,6 +15,19 @@ pub struct FolderProfile {
     pub path: String,
 }
 
+/// Domain-bound destination: URLs whose host equals `domain` (or is a
+/// subdomain of it) save into `path`. The domain is derived from a URL at
+/// creation and doubles as the default title; the binding itself is never
+/// exposed to the UI afterwards (only `title`/`path` are edited).
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveLocation {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub domain: String,
+}
+
 /// Mirrors `AppSettings` in src/types.ts (camelCase keys match the frontend).
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +56,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub folder_profiles: Vec<FolderProfile>,
     #[serde(default)]
+    pub save_locations: Vec<SaveLocation>,
+    #[serde(default)]
     pub active_profile_id: String,
     pub ytdlp_version: Option<String>,
     pub ffmpeg_version: Option<String>,
@@ -53,6 +68,10 @@ pub struct AppSettings {
     /// keep parsing (a missing required field would discard all user settings).
     #[serde(default = "default_true")]
     pub notify_on_complete: bool,
+    /// Pull the window into view when a metadata fetch finishes if it isn't
+    /// already; on failure, show a notification instead of pulling focus.
+    #[serde(default = "default_true")]
+    pub focus_on_fetch: bool,
 }
 
 fn default_true() -> bool {
@@ -84,11 +103,13 @@ pub fn default_settings() -> AppSettings {
         audio_quality: "192".to_string(),
         check_for_updates: true,
         folder_profiles: Vec::new(),
+        save_locations: Vec::new(),
         active_profile_id: String::new(),
         ytdlp_version: None,
         ffmpeg_version: None,
         mock_mode: false,
         notify_on_complete: true,
+        focus_on_fetch: true,
     }
 }
 
@@ -154,10 +175,76 @@ pub async fn reset_settings(app: tauri::AppHandle) -> AppSettings {
 /// Netscape cookies file (`--cookies`) is used. YouTube in particular throws a
 /// "confirm you're not a bot" wall when unauthenticated, which cookies resolve.
 pub fn apply_cookies(cmd: &mut Command, settings: &AppSettings) {
-    if !settings.cookies_browser.is_empty() {
+    let browser = settings.cookies_browser.as_str();
+    // Safari's cookie store only exists on macOS; yt-dlp aborts any other
+    // platform with "ERROR: unsupported platform: win32" before doing
+    // anything, so a stale Safari selection must not be passed through.
+    let usable = !browser.is_empty() && (browser != "safari" || cfg!(target_os = "macos"));
+    if usable {
         cmd.arg("--cookies-from-browser")
-            .arg(&settings.cookies_browser);
+            .arg(browser);
     } else if !settings.cookies_file.is_empty() {
         cmd.arg("--cookies").arg(&settings.cookies_file);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cookie_args(browser: &str, file: &str) -> String {
+        let mut s = default_settings();
+        s.cookies_browser = browser.to_string();
+        s.cookies_file = file.to_string();
+        let mut cmd = Command::new("yt-dlp");
+        apply_cookies(&mut cmd, &s);
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn safari_cookies_are_only_passed_on_macos() {
+        assert_eq!(
+            cookie_args("safari", ""),
+            if cfg!(target_os = "macos") {
+                "--cookies-from-browser safari"
+            } else {
+                ""
+            }
+        );
+    }
+
+    #[test]
+    fn safari_skips_to_the_cookies_file_elsewhere() {
+        assert_eq!(
+            cookie_args("safari", "c.txt"),
+            if cfg!(target_os = "macos") {
+                "--cookies-from-browser safari"
+            } else {
+                "--cookies c.txt"
+            }
+        );
+    }
+
+    #[test]
+    fn other_browsers_and_files_still_apply() {
+        assert_eq!(cookie_args("chrome", ""), "--cookies-from-browser chrome");
+        assert_eq!(cookie_args("", "c.txt"), "--cookies c.txt");
+        assert_eq!(cookie_args("", ""), "");
+    }
+
+    #[test]
+    fn settings_json_from_before_the_new_fields_still_parses() {
+        // A settings.json saved before focusOnFetch/saveLocations existed must
+        // keep parsing — serde defaults fill the gap instead of failing the
+        // whole load (which would silently reset every user setting).
+        let mut v = serde_json::to_value(default_settings()).unwrap();
+        v.as_object_mut().unwrap().remove("focusOnFetch");
+        v.as_object_mut().unwrap().remove("saveLocations");
+        let s: AppSettings = serde_json::from_value(v).unwrap();
+        assert!(s.focus_on_fetch);
+        assert!(s.save_locations.is_empty());
     }
 }

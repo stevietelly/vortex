@@ -1,5 +1,7 @@
 use serde::Serialize;
 use std::process::Command;
+use tauri::Manager;
+use tauri_plugin_notification::NotificationExt;
 
 use crate::commands::binary;
 use crate::commands::hide_console;
@@ -393,14 +395,62 @@ pub fn map_metadata(url: &str, info: &serde_json::Value) -> VideoMetadata {
     }
 }
 
+/// True when the main window is already "in view" — on screen, unminimized,
+/// and focused — so a completed fetch shouldn't need to touch it.
+fn window_in_view(app: &tauri::AppHandle) -> bool {
+    let Some(win) = app.get_webview_window("main") else {
+        return true; // no window to move (e.g. headless test)
+    };
+    !win.is_minimized().unwrap_or(false) && win.is_focused().unwrap_or(false)
+}
+
+/// Pull the main window into view: restore it from the taskbar and focus it.
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+}
+
+/// Native notification for a failed fetch — the user may have walked away,
+/// so yanking the window forward for an error would be hostile; a toast
+/// carries the message instead.
+fn notify_fetch_error(app: &tauri::AppHandle, err: &str) {
+    let body: String = err.chars().take(300).collect();
+    let _ = app
+        .notification()
+        .builder()
+        .title("Metadata fetch failed")
+        .body(body)
+        .show();
+}
+
 /// Fetch metadata for a URL via `yt-dlp -J <url>` and map it to `VideoMetadata`.
 ///
 /// Error states (private/age-restricted, geo-blocked, invalid URL, missing
 /// binary) surface as `Err` with yt-dlp's "ERROR: ..." line so the UI can show
 /// them. yt-dlp path comes from saved settings, falling back to the default.
+///
+/// When the window is NOT already in view, a successful fetch pulls it into
+/// view and a failed fetch shows a notification instead (both gated by the
+/// `focusOnFetch` setting); if the window is in view, the inline UI is enough.
 #[tauri::command]
 pub async fn fetch_metadata(app: tauri::AppHandle, url: String) -> Result<VideoMetadata, String> {
     let settings = settings::load_settings(app.clone()).await;
+    let result = fetch_metadata_inner(&url, &settings).await;
+    if settings.focus_on_fetch && !window_in_view(&app) {
+        match &result {
+            Ok(_) => focus_main_window(&app),
+            Err(e) => notify_fetch_error(&app, e),
+        }
+    }
+    result
+}
+
+async fn fetch_metadata_inner(
+    url: &str,
+    settings: &settings::AppSettings,
+) -> Result<VideoMetadata, String> {
     let ytdlp = match binary::resolve_binary("yt-dlp", &settings.ytdlp_path) {
         Some(p) => p,
         None => {
@@ -426,8 +476,8 @@ pub async fn fetch_metadata(app: tauri::AppHandle, url: String) -> Result<VideoM
         .arg("--flat-playlist")
         .arg("--playlist-end")
         .arg(PLAYLIST_ENTRY_LIMIT.to_string())
-        .arg(&url);
-    settings::apply_cookies(&mut cmd, &settings);
+        .arg(url);
+    settings::apply_cookies(&mut cmd, settings);
     let output = match cmd.output() {
         Ok(o) => o,
         Err(e) => {
@@ -454,7 +504,7 @@ pub async fn fetch_metadata(app: tauri::AppHandle, url: String) -> Result<VideoM
         }
     };
 
-    let metadata = map_metadata(&url, &info);
+    let metadata = map_metadata(url, &info);
 
     Ok(metadata)
 }

@@ -17,6 +17,7 @@ import {
 } from "@/lib/notify";
 import { invoke, isTauri } from "@/lib/tauri";
 import { buildFallbackChain } from "@/lib/format";
+import { matchSaveLocation } from "@/lib/saveLocations";
 import { mockStartDownload } from "@/lib/mock";
 import {
   addJob,
@@ -109,12 +110,17 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     void saveSettings(DEFAULT_SETTINGS);
   }, []);
 
+  // Destination priority: an explicit folder-profile choice always wins, then
+  // a save location bound to the URL's domain, then the global download dir.
   const resolveDir = useCallback(
-    (profileId?: string): string => {
+    (url: string, profileId?: string): string => {
       const profile = profileId
         ? settings.folderProfiles.find((p) => p.id === profileId)
         : undefined;
-      return profile?.path?.trim() ? profile.path : settings.downloadDir;
+      if (profile?.path?.trim()) return profile.path;
+      const match = matchSaveLocation(url, settings.saveLocations);
+      if (match?.path?.trim()) return match.path;
+      return settings.downloadDir;
     },
     [settings],
   );
@@ -133,7 +139,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
       const fallbackFormatIds = buildFallbackChain(metadata.formats, formatId);
       const reqId = opts?.requestId || metadata.id || metadata.url;
       const entries = metadata.entries ?? [];
-      const dir = resolveDir(opts?.profileId);
+      const dir = resolveDir(metadata.url, opts?.profileId);
 
       const startOne = async (o: {
         url: string;

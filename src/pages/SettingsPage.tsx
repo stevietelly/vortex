@@ -11,6 +11,11 @@ let autoVerified = false
 
 // Popular browsers yt-dlp can pull cookies from via --cookies-from-browser.
 // Value "" means "none" (falls back to the cookies file, if any).
+// Safari's cookie store only exists on macOS — yt-dlp aborts other platforms
+// with "ERROR: unsupported platform: win32", so it's only offered on a Mac.
+const IS_MAC = /mac/i.test(
+  typeof navigator !== "undefined" ? navigator.platform : "",
+)
 const BROWSER_OPTIONS = [
   { value: "", label: "None" },
   { value: "chrome", label: "Chrome" },
@@ -20,7 +25,7 @@ const BROWSER_OPTIONS = [
   { value: "opera", label: "Opera" },
   { value: "vivaldi", label: "Vivaldi" },
   { value: "chromium", label: "Chromium" },
-  { value: "safari", label: "Safari" },
+  ...(IS_MAC ? [{ value: "safari", label: "Safari" }] : []),
 ]
 
 function Spinner() {
@@ -547,7 +552,21 @@ export default function SettingsPage() {
           <SelectInput
             label="Cookies source"
             field="cookiesBrowser"
-            options={BROWSER_OPTIONS}
+            options={
+              // A stale saved value (e.g. Safari picked before moving to
+              // Windows) stays visible so the control shows what's actually
+              // stored instead of silently rendering the first entry.
+              settings.cookiesBrowser &&
+              !BROWSER_OPTIONS.some((o) => o.value === settings.cookiesBrowser)
+                ? [
+                    ...BROWSER_OPTIONS,
+                    {
+                      value: settings.cookiesBrowser,
+                      label: `${settings.cookiesBrowser} (unavailable here)`,
+                    },
+                  ]
+                : BROWSER_OPTIONS
+            }
             hint="YouTube may ask you to confirm you're not a bot. Sign in to a browser and select it here to pass cookies automatically (recommended). A selected browser takes priority over the cookies file below."
             {...shared}
           />
@@ -566,6 +585,12 @@ export default function SettingsPage() {
             label="Notify when downloads finish"
             field="notifyOnComplete"
             hint="Show a native OS notification when a download completes or fails."
+            {...shared}
+          />
+          <Toggle
+            label="Bring window forward after fetching"
+            field="focusOnFetch"
+            hint="When you fetch a link and the window isn't in view, bring it forward once the info loads. If the fetch fails, show a notification instead."
             {...shared}
           />
           <Toggle
