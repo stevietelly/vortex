@@ -263,7 +263,14 @@ function SaveLocationsSection() {
   }
 
   const commitEdit = () => {
-    if (!editTitle.trim() || !editPath.trim()) return
+    if (!editTitle.trim()) {
+      setError("Title can't be blank")
+      return
+    }
+    if (!editPath.trim()) {
+      setError("Pick a folder for this save location")
+      return
+    }
     persist(
       settings.saveLocations.map((l) =>
         l.id === editingId
@@ -271,6 +278,7 @@ function SaveLocationsSection() {
           : l,
       ),
     )
+    setError("")
     setEditingId(null)
   }
 
