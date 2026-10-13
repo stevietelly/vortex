@@ -8,7 +8,6 @@ function Window() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme.mode === "dark")
-    console.log(theme.mode)
   }, [theme.mode])
   return (
     <div className="Window">

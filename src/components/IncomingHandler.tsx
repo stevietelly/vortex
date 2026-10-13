@@ -78,6 +78,8 @@ export default function IncomingHandler() {
           // saved requests (visible under Downloads).
           navigated = true
           navigateRef.current("info", { uid })
+        } else {
+          void fetchAndRecord(uid, url, s.mockMode).catch(() => {})
         }
       } catch {
         // fetchAndRecord already marked the request as errored.
@@ -87,9 +89,14 @@ export default function IncomingHandler() {
 
   useEffect(() => {
     if (!isTauri()) return
-    // Anything that arrived before the webview was ready is still queued.
-    void drainAndProcess()
+    // Subscribe before draining: an `incoming-urls` event firing between an
+    // immediate drain and listener registration would be missed (the queue is
+    // drain-based, so those URLs would sit unprocessed). Anything that
+    // arrived before the webview was ready is still queued.
     const unlisten = listen("incoming-urls", () => {
+      void drainAndProcess()
+    })
+    unlisten.then(() => {
       void drainAndProcess()
     })
     return () => {

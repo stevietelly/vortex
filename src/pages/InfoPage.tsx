@@ -389,12 +389,14 @@ function DownloadPanel({
                 >
                   <div>
                     <label
+                      htmlFor="save-location-title"
                       className="mono text-[9px] uppercase tracking-widest block mb-1"
                       style={{ color: "var(--muted-foreground)" }}
                     >
                       Title
                     </label>
                     <input
+                      id="save-location-title"
                       type="text"
                       value={newLocTitle}
                       onChange={(e) => setNewLocTitle(e.target.value)}
@@ -409,6 +411,7 @@ function DownloadPanel({
                   </div>
                   <div>
                     <label
+                      htmlFor="save-location-path"
                       className="mono text-[9px] uppercase tracking-widest block mb-1"
                       style={{ color: "var(--muted-foreground)" }}
                     >
@@ -416,6 +419,7 @@ function DownloadPanel({
                     </label>
                     <div className="flex gap-1.5">
                       <input
+                        id="save-location-path"
                         type="text"
                         value={newLocPath}
                         onChange={(e) => {
@@ -544,6 +548,7 @@ function DownloadPanel({
                 <div className="flex gap-1.5">
                   <input
                     type="text"
+                    aria-label="Custom destination folder"
                     value={customFolder}
                     onChange={(e) => setCustomFolder(e.target.value)}
                     placeholder="Custom folder for this download"
