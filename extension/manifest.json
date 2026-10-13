@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Vortex",
+  "version": "0.2.0",
+  "description": "Discover videos on a page and send them to the Vortex downloader app.",
+  "permissions": ["activeTab", "storage", "contextMenus"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Send to Vortex",
+    "default_icon": {
+      "16": "icons/32x32.png",
+      "32": "icons/32x32.png",
+      "48": "icons/64x64.png",
+      "128": "icons/128x128.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "icons": {
+    "16": "icons/32x32.png",
+    "32": "icons/32x32.png",
+    "48": "icons/64x64.png",
+    "128": "icons/128x128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "vortex@stevietelly.github.io",
+      "strict_min_version": "109.0"
+    }
+  }
+}

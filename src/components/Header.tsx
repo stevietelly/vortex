@@ -1,4 +1,4 @@
-import { IconArrowLeft, IconDownload, IconLink, IconMoon, IconSettings, IconSun, IconTray } from "@/icons"
+import { IconArrowLeft, IconLink, IconMoon, IconSettings, IconSun, IconTray } from "@/icons"
 
 import { useRouter } from "@/router/provider"
 
@@ -16,28 +16,6 @@ function Header() {
       className="flex items-center px-5 py-2.5 border-b gap-3 shrink"
       style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
     >
-      <button
-        type="button"
-        onClick={() => navigate("home", undefined)}
-        className="flex items-center gap-1.5 cursor-pointer shrink"
-      >
-        <div
-          className="w-5 h-5 rounded flex items-center justify-center"
-          style={{
-            backgroundColor: "var(--primary)",
-
-            color: "var(--primary-foreground)",
-          }}
-        >
-          <IconDownload size={11} />
-        </div>
-        <span
-          className="text-sm font-semibold"
-          style={{ color: "var(--foreground)" }}
-        >
-          Downlink
-        </span>
-      </button>
 
       {current.route === "info" && (
         <div className="flex items-center gap-1.5 min-w-0">

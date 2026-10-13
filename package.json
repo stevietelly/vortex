@@ -1,11 +1,13 @@
 {
-  "name": "figma-make-app",
+  "name": "vortex-downloader",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "react:dev": "vite --host 0.0.0.0",
+    "dev": "tauri dev",
+    "react:build": "vite build",
+    "build": "tauri build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt"

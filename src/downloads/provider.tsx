@@ -61,6 +61,7 @@ interface DownloadsContextValue {
     opts?: {
       downloadAll?: boolean;
       profileId?: string;
+      customDir?: string;
       requestId?: string;
     },
   ) => Promise<void>;
@@ -113,7 +114,8 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   // Destination priority: an explicit folder-profile choice always wins, then
   // a save location bound to the URL's domain, then the global download dir.
   const resolveDir = useCallback(
-    (url: string, profileId?: string): string => {
+    (url: string, profileId?: string, customDir?: string): string => {
+      if (customDir?.trim()) return customDir.trim();
       const profile = profileId
         ? settings.folderProfiles.find((p) => p.id === profileId)
         : undefined;
@@ -132,6 +134,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
       opts?: {
         downloadAll?: boolean;
         profileId?: string;
+        customDir?: string;
         requestId?: string;
       },
     ) => {
@@ -139,7 +142,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
       const fallbackFormatIds = buildFallbackChain(metadata.formats, formatId);
       const reqId = opts?.requestId || metadata.id || metadata.url;
       const entries = metadata.entries ?? [];
-      const dir = resolveDir(metadata.url, opts?.profileId);
+      const dir = resolveDir(metadata.url, opts?.profileId, opts?.customDir);
 
       const startOne = async (o: {
         url: string;

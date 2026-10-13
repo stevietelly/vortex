@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "vortex-downloader",
-  "version": "0.2.0",
+  "productName": "Vortex Downloader",
+  "version": "0.3.0",
   "identifier": "vortex.downloader",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:8443",
-    "beforeDevCommand": "bun dev",
-    "beforeBuildCommand": "bun run build"
+    "beforeDevCommand": "bun run react:dev",
+    "beforeBuildCommand": "bun run react:build"
   },
   "app": {
     "windows": [
@@ -42,6 +42,13 @@
       "preload": [
         "sqlite:vortex.db"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "vortex"
+        ]
+      }
     }
   }
 }

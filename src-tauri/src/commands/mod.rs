@@ -1,5 +1,7 @@
 pub mod binary;
+pub mod bridge;
 pub mod download;
+pub mod incoming;
 pub mod metadata;
 pub mod settings;
 

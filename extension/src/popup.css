@@ -1,0 +1,145 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 340px;
+  font: 12px/1.45 system-ui, sans-serif;
+  color: #e5e7eb;
+  background: #111318;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #262a33;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+.dot.on {
+  background: #22c55e;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #1c1f27;
+}
+.row:hover {
+  background: #171a21;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  font-weight: 500;
+}
+
+.sub {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-label {
+  padding: 8px 12px 4px;
+  color: #6b7280;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.empty {
+  padding: 16px 12px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #9ca3af;
+  border: 1px solid #262a33;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.btn {
+  flex-shrink: 0;
+  border: 1px solid #262a33;
+  background: #1c1f27;
+  color: #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #232733;
+}
+.btn.primary {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+.btn.primary:hover {
+  background: #5b52f0;
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.toast {
+  padding: 8px 12px 12px;
+  text-align: center;
+  color: #22c55e;
+}
+.toast.error {
+  color: #ef4444;
+}

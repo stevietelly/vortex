@@ -8,6 +8,9 @@ import { useRequestIssues, useRequestItems } from "@/lib/downloadItems"
 import { useDownloads } from "@/downloads/provider"
 import { useRouteParams, useRouter } from "@/router/provider"
 import { ISSUE_HINT, STATE_COLOR, STATE_LABEL, labelForSelector } from "@/utils"
+import { domainFromInput, matchSaveLocation } from "@/lib/saveLocations"
+import { pickPath } from "@/lib/tauri"
+import type { SaveLocation } from "@/types"
 import type {
   DownloadStatus,
   PostprocessIssue,
@@ -226,9 +229,10 @@ function DownloadPanel({
     formatId: string,
     downloadAll?: boolean,
     profileId?: string,
+    customDir?: string,
   ) => void
 }) {
-  const { settings } = useDownloads()
+  const { settings, updateSettings } = useDownloads()
   const folderProfiles = settings.folderProfiles
   const [selectedId, setSelectedId] = useState<string>(() => {
     const byHeight = metadata.formats.find((f) => f.height === 1080)
@@ -240,6 +244,16 @@ function DownloadPanel({
   })
   const [downloadAll, setDownloadAll] = useState(false)
   const [profileId, setProfileId] = useState<string>(settings.activeProfileId)
+  const [customFolder, setCustomFolder] = useState<string>("")
+  const [isCustomFolderActive, setIsCustomFolderActive] = useState(false)
+
+  // Save location matching & creation
+  const domain = domainFromInput(metadata.url || "")
+  const matchedLocation = matchSaveLocation(metadata.url || "", settings.saveLocations)
+  const [showAddLocation, setShowAddLocation] = useState(false)
+  const [newLocTitle, setNewLocTitle] = useState("")
+  const [newLocPath, setNewLocPath] = useState("")
+  const [addLocError, setAddLocError] = useState("")
 
   const selected = metadata.formats.find((f) => f.id === selectedId)
 
@@ -287,6 +301,282 @@ function DownloadPanel({
                 </span>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Save Location for this domain */}
+        <div
+          className="p-3 rounded-lg border text-xs"
+          style={{
+            borderColor: "var(--border)",
+            backgroundColor: "var(--muted)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span
+              className="mono text-[10px] uppercase tracking-widest"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Save location {domain ? `(${domain})` : ""}
+            </span>
+            {matchedLocation ? (
+              <span
+                className="mono text-[10px] px-1.5 py-0.5 rounded font-medium"
+                style={{
+                  backgroundColor: "var(--primary)22",
+                  color: "var(--primary)",
+                }}
+              >
+                Matched
+              </span>
+            ) : (
+              <span
+                className="mono text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: "var(--card)",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                Default folder
+              </span>
+            )}
+          </div>
+
+          {matchedLocation ? (
+            <div className="space-y-1">
+              <div
+                className="font-medium truncate"
+                style={{ color: "var(--foreground)" }}
+              >
+                {matchedLocation.title}
+              </div>
+              <div
+                className="mono text-[10px] truncate"
+                style={{ color: "var(--muted-foreground)" }}
+                title={matchedLocation.path}
+              >
+                {matchedLocation.path}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 mt-2">
+              <p
+                className="text-[11px]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                No specific save location for this domain. Downloads will save to your default directory.
+              </p>
+              {!showAddLocation ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddLocation(true)}
+                  className="mono text-[11px] px-2.5 py-1 rounded border cursor-pointer font-medium"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--card)",
+                    color: "var(--foreground)",
+                  }}
+                >
+                  + Add save location for {domain || "this site"}
+                </button>
+              ) : (
+                <div
+                  className="p-2.5 rounded border space-y-2"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--card)",
+                  }}
+                >
+                  <div>
+                    <label
+                      htmlFor="save-location-title"
+                      className="mono text-[9px] uppercase tracking-widest block mb-1"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      Title
+                    </label>
+                    <input
+                      id="save-location-title"
+                      type="text"
+                      value={newLocTitle}
+                      onChange={(e) => setNewLocTitle(e.target.value)}
+                      placeholder={domain || "Save location"}
+                      className="w-full px-2 py-1 text-xs rounded border outline-none mono"
+                      style={{
+                        backgroundColor: "var(--background)",
+                        borderColor: "var(--border)",
+                        color: "var(--foreground)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="save-location-path"
+                      className="mono text-[9px] uppercase tracking-widest block mb-1"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      Folder
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        id="save-location-path"
+                        type="text"
+                        value={newLocPath}
+                        onChange={(e) => {
+                          setNewLocPath(e.target.value)
+                          setAddLocError("")
+                        }}
+                        placeholder="Choose a directory"
+                        className="flex-1 px-2 py-1 text-xs rounded border outline-none mono"
+                        style={{
+                          backgroundColor: "var(--background)",
+                          borderColor: "var(--border)",
+                          color: "var(--foreground)",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const p = await pickPath({ directory: true })
+                          if (p) setNewLocPath(p)
+                        }}
+                        className="text-xs px-2.5 py-1 rounded border cursor-pointer flex-shrink-0"
+                        style={{
+                          borderColor: "var(--border)",
+                          backgroundColor: "var(--muted)",
+                          color: "var(--foreground)",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+                  {addLocError && (
+                    <div className="text-[10px] text-red-500 font-medium">
+                      {addLocError}
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddLocation(false)
+                        setAddLocError("")
+                      }}
+                      className="text-[10px] px-2 py-1 rounded border cursor-pointer"
+                      style={{
+                        borderColor: "var(--border)",
+                        color: "var(--muted-foreground)",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!domain) {
+                          setAddLocError("No domain found for this URL")
+                          return
+                        }
+                        if (!newLocPath.trim()) {
+                          setAddLocError("Please select or enter a folder path")
+                          return
+                        }
+                        const id = crypto.randomUUID?.() ?? `sl-${Date.now()}`
+                        updateSettings({
+                          saveLocations: [
+                            ...settings.saveLocations,
+                            {
+                              id,
+                              title: newLocTitle.trim() || domain,
+                              path: newLocPath.trim(),
+                              domain,
+                            },
+                          ],
+                        })
+                        setShowAddLocation(false)
+                        setNewLocPath("")
+                        setNewLocTitle("")
+                        setAddLocError("")
+                      }}
+                      className="text-[10px] px-2.5 py-1 rounded font-medium cursor-pointer"
+                      style={{
+                        backgroundColor: "var(--primary)",
+                        color: "var(--primary-foreground)",
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manually direct download to custom folder */}
+          <div className="pt-2 border-t mt-2" style={{ borderColor: "var(--border)" }}>
+            {!isCustomFolderActive ? (
+              <button
+                type="button"
+                onClick={() => setIsCustomFolderActive(true)}
+                className="mono text-[10px] text-left underline cursor-pointer"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Direct this download to a different folder…
+              </button>
+            ) : (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <span
+                    className="mono text-[9px] uppercase tracking-widest font-semibold"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    Custom Destination Folder
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomFolderActive(false)
+                      setCustomFolder("")
+                    }}
+                    className="mono text-[9px] cursor-pointer"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    Reset to default / auto
+                  </button>
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    aria-label="Custom destination folder"
+                    value={customFolder}
+                    onChange={(e) => setCustomFolder(e.target.value)}
+                    placeholder="Custom folder for this download"
+                    className="flex-1 px-2 py-1 text-xs rounded border outline-none mono"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--primary)",
+                      color: "var(--foreground)",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const p = await pickPath({ directory: true })
+                      if (p) setCustomFolder(p)
+                    }}
+                    className="text-xs px-2.5 py-1 rounded border cursor-pointer flex-shrink-0"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--muted)",
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -339,7 +629,7 @@ function DownloadPanel({
         ) : null}
 
         {/* Destination folder profile */}
-        {folderProfiles.length > 0 && (
+        {folderProfiles.length > 0 && !isCustomFolderActive && (
           <div>
             <label
               className="mono text-[10px] uppercase tracking-widest block mb-2"
@@ -369,7 +659,14 @@ function DownloadPanel({
         {/* Download button */}
         <button
           onClick={() =>
-            onDownload(selectedId, downloadAll, profileId || undefined)
+            onDownload(
+              selectedId,
+              downloadAll,
+              // Custom mode disables the folder profile entirely — even with
+              // no folder typed yet, a stale profileId must not win.
+              isCustomFolderActive ? undefined : profileId || undefined,
+              isCustomFolderActive && customFolder.trim() ? customFolder.trim() : undefined,
+            )
           }
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded font-medium text-sm transition-all cursor-pointer hover:opacity-90 active:scale-[0.99]"
           style={{
@@ -396,6 +693,7 @@ function VideoInfoPage({
     formatId: string,
     downloadAll?: boolean,
     profileId?: string,
+    customDir?: string,
   ) => void
 }) {
   return (
@@ -524,6 +822,7 @@ function PlaylistInfoPage({
     formatId: string,
     downloadAll?: boolean,
     profileId?: string,
+    customDir?: string,
   ) => void
 }) {
   const entries = metadata.entries ?? []
@@ -874,11 +1173,13 @@ export default function InfoPage() {
     formatId: string,
     downloadAll?: boolean,
     profileId?: string,
+    customDir?: string,
   ) => {
     if (!metadata) return
     void startDownload(metadata, formatId, {
       downloadAll,
       profileId,
+      customDir,
       requestId: uid,
     })
   }

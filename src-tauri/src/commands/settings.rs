@@ -72,10 +72,19 @@ pub struct AppSettings {
     /// already; on failure, show a notification instead of pulling focus.
     #[serde(default = "default_true")]
     pub focus_on_fetch: bool,
+    /// What to do with URLs sent from the browser extension: "prefetch" opens
+    /// the Info page (fetch + review), "download" fetches in the background
+    /// and starts the download with default (best) quality.
+    #[serde(default = "default_incoming_action")]
+    pub incoming_action: String,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_incoming_action() -> String {
+    "prefetch".to_string()
 }
 
 /// Platform-naive defaults. Binary defaults should ultimately come from
@@ -110,6 +119,7 @@ pub fn default_settings() -> AppSettings {
         mock_mode: false,
         notify_on_complete: true,
         focus_on_fetch: true,
+        incoming_action: "prefetch".to_string(),
     }
 }
 
@@ -237,14 +247,17 @@ mod tests {
 
     #[test]
     fn settings_json_from_before_the_new_fields_still_parses() {
-        // A settings.json saved before focusOnFetch/saveLocations existed must
-        // keep parsing — serde defaults fill the gap instead of failing the
-        // whole load (which would silently reset every user setting).
+        // A settings.json saved before these fields existed must keep parsing
+        // — serde defaults fill the gap instead of failing the whole load
+        // (which would silently reset every user setting).
         let mut v = serde_json::to_value(default_settings()).unwrap();
-        v.as_object_mut().unwrap().remove("focusOnFetch");
-        v.as_object_mut().unwrap().remove("saveLocations");
+        let obj = v.as_object_mut().unwrap();
+        obj.remove("focusOnFetch");
+        obj.remove("saveLocations");
+        obj.remove("incomingAction");
         let s: AppSettings = serde_json::from_value(v).unwrap();
         assert!(s.focus_on_fetch);
         assert!(s.save_locations.is_empty());
+        assert_eq!(s.incoming_action, "prefetch");
     }
 }

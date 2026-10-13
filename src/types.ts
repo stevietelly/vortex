@@ -51,6 +51,10 @@ export interface AppSettings {
   // Bring the window into view when a metadata fetch finishes (if it isn't
   // already); on failure, show a notification instead of pulling focus.
   focusOnFetch: boolean
+  // URLs sent from the browser extension: "prefetch" opens the Info page
+  // (fetch + review); "download" fetches in the background and auto-starts
+  // the download with default (best) quality.
+  incomingAction: "prefetch" | "download"
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -80,4 +84,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mockMode: false,
   notifyOnComplete: true,
   focusOnFetch: true,
+  incomingAction: "prefetch",
 }
