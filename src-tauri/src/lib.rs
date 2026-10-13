@@ -31,10 +31,10 @@ pub fn run() {
         // over a vortex:// link while we're already running) must reach this
         // instance instead of starting a duplicate app.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Hand the second launch's argv to the deep-link plugin, which
-            // emits `deep-link://new-url` for any vortex:// args it finds.
-            // Use try_state: if deep-link hasn't registered its state yet
-            // (extremely unlikely but possible during startup), skip gracefully.
+            // Forward warm argv directly to incoming queue
+            commands::incoming::handle_warm_argv(app, &argv);
+
+            // Also hand to deep-link plugin if registered
             if let Some(deep_link) =
                 app.try_state::<tauri_plugin_deep_link::DeepLink<tauri::Wry>>()
             {

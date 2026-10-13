@@ -44,6 +44,38 @@ pub fn enqueue(app: &tauri::AppHandle, urls: Vec<String>) {
     let _ = app.emit("incoming-urls", ());
 }
 
+/// Extract the inner http(s) URL from a `vortex://add?url=<encoded>` deep
+/// link. Returns None if the scheme is not vortex, the host is not add,
+/// the link has no `url` param, or the extracted value isn't a valid http/https URL.
+pub(crate) fn extract_url_from_vortex_link(deep_link_url: &url::Url) -> Option<String> {
+    if deep_link_url.scheme() != "vortex" || deep_link_url.host_str() != Some("add") {
+        return None;
+    }
+    let inner = deep_link_url
+        .query_pairs()
+        .find(|(k, _)| k == "url")
+        .map(|(_, v)| v.into_owned())?;
+    validate_incoming_url(&inner)
+}
+
+/// Called from the single-instance callback when a second launch's argv is
+/// forwarded to the running instance. Scans every argument for `vortex://`
+/// URLs and enqueues the extracted http(s) targets — bypassing
+/// `handle_cli_arguments` → `on_open_url` which doesn't reliably fire on
+/// Windows for the warm-start path.
+pub fn handle_warm_argv(app: &tauri::AppHandle, argv: &[String]) {
+    log::info!("[incoming] warm argv = {:?}", argv);
+    let urls: Vec<String> = argv
+        .iter()
+        .map(|s| s.trim().trim_matches('"').trim_matches('\''))
+        .filter_map(|arg| url::Url::parse(arg).ok())
+        .filter_map(|u| extract_url_from_vortex_link(&u))
+        .collect();
+    if !urls.is_empty() {
+        enqueue(app, urls);
+    }
+}
+
 /// Called from `lib.rs` setup, after the deep-link plugin has initialized:
 /// registers the `vortex` scheme (HKCU on Windows — no admin needed), captures
 /// the cold-start URL the OS launched us with, and relays every later deep
@@ -58,18 +90,28 @@ pub fn setup_deep_link_relay(app: &tauri::AppHandle) {
     // Cold start: the plugin already parsed our CLI args during its own setup
     // (see init_deep_link in the plugin source) — pick the stored URL up here,
     // before the frontend exists to receive events.
-    match deep_link.get_current() {
-        Ok(urls) => log::info!("[incoming] get_current = {:?}", urls.as_ref().map(|v| v.iter().map(|u| u.to_string()).collect::<Vec<_>>())),
-        Err(e) => log::info!("[incoming] get_current err = {e}"),
-    }
     if let Ok(Some(urls)) = deep_link.get_current() {
-        enqueue(app, urls.iter().map(|u| u.to_string()).collect());
+        let extracted: Vec<String> = urls
+            .iter()
+            .filter_map(|u| extract_url_from_vortex_link(u))
+            .collect();
+        if !extracted.is_empty() {
+            enqueue(app, extracted);
+        }
     }
 
-    // Warm: every vortex:// link clicked while we're running.
+    // Warm: also register on_open_url as a belt-and-suspenders path for
+    // platforms that do deliver OS-level open-url events (macOS, Linux).
     let handle = app.clone();
     deep_link.on_open_url(move |ev| {
-        enqueue(&handle, ev.urls().iter().map(|u| u.to_string()).collect());
+        let extracted: Vec<String> = ev
+            .urls()
+            .iter()
+            .filter_map(|u| extract_url_from_vortex_link(u))
+            .collect();
+        if !extracted.is_empty() {
+            enqueue(&handle, extracted);
+        }
     });
 }
 
@@ -114,4 +156,57 @@ mod tests {
         assert_eq!(validate_incoming_url("http://"), None);
         assert_eq!(validate_incoming_url("https:// "), None);
     }
+    #[test]
+    fn extract_url_from_vortex_link_works() {
+        let parse = |s: &str| url::Url::parse(s).unwrap();
+
+        // Percent-encoded inner URL (as the extension sends it)
+        assert_eq!(
+            extract_url_from_vortex_link(&parse(
+                "vortex://add?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ"
+            ))
+            .as_deref(),
+            Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        );
+
+        // Unencoded inner URL (as Start-Process sends it)
+        assert_eq!(
+            extract_url_from_vortex_link(&parse(
+                "vortex://add?url=https://example.com/video"
+            ))
+            .as_deref(),
+            Some("https://example.com/video")
+        );
+
+        // Missing url param → None
+        assert_eq!(
+            extract_url_from_vortex_link(&parse("vortex://add")),
+            None
+        );
+
+        // Non-http inner URL → rejected
+        assert_eq!(
+            extract_url_from_vortex_link(&parse(
+                "vortex://add?url=javascript%3Aalert(1)"
+            )),
+            None
+        );
+
+        // Non-vortex scheme → rejected
+        assert_eq!(
+            extract_url_from_vortex_link(&parse(
+                "https://add?url=https://example.com/video"
+            )),
+            None
+        );
+
+        // Non-add host → rejected
+        assert_eq!(
+            extract_url_from_vortex_link(&parse(
+                "vortex://download?url=https://example.com/video"
+            )),
+            None
+        );
+    }
 }
+
