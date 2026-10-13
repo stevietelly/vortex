@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { IconRefresh, IconSettings } from "../icons"
 import type { AppSettings } from "../types"
 import { validateBinary } from "@/lib/settings"
-import { pickPath, type BinaryStatus } from "@/lib/tauri"
+import { invoke, pickPath, type BinaryStatus } from "@/lib/tauri"
 import { useDownloads } from "@/downloads/provider"
 
 // Ensures the mount-time auto-verify runs at most once per app session, even
@@ -45,6 +45,86 @@ import Toggle from "@/components/ui/Toggle"
 import NumberInput from "@/components/ui/NumberInput"
 
 import PathInput from "@/components/ui/PathInput"
+
+/** Bridge port/token for the browser extension, with copy + liveness check. */
+function BridgeStatus() {
+  const [info, setInfo] = useState<
+    { port: number; token: string } | null | undefined
+  >(undefined) // undefined = loading, null = unavailable
+  const [copied, setCopied] = useState(false)
+  const [healthy, setHealthy] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    invoke<{ port: number; token: string }>("get_bridge_info")
+      .then(setInfo)
+      .catch(() => setInfo(null))
+  }, [])
+
+  if (info === undefined)
+    return (
+      <div className="mono text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+        Bridge: starting…
+      </div>
+    )
+  if (info === null)
+    return (
+      <div className="mono text-[10px]" style={{ color: "#EF4444" }}>
+        Bridge unavailable — restart the app to retry
+      </div>
+    )
+
+  return (
+    <div
+      className="flex items-center gap-2 flex-wrap mono text-[10px] px-3 py-2 rounded border"
+      style={{
+        backgroundColor: "var(--muted)",
+        borderColor: "var(--border)",
+        color: "var(--muted-foreground)",
+      }}
+    >
+      <span>
+        Bridge: 127.0.0.1:{info.port}
+      </span>
+      <span className="truncate max-w-[180px]" title={info.token}>
+        token ••••{info.token.slice(-4)}
+      </span>
+      <button
+        onClick={() => {
+          void navigator.clipboard.writeText(info.token).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          })
+        }}
+        className="px-2 py-0.5 rounded border cursor-pointer"
+        style={{
+          borderColor: "var(--border)",
+          color: copied ? "#22C55E" : "var(--foreground)",
+        }}
+      >
+        {copied ? "Copied ✓" : "Copy token"}
+      </button>
+      <button
+        onClick={() => {
+          void fetch(`http://127.0.0.1:${info.port}/health`)
+            .then((r) => setHealthy(r.ok))
+            .catch(() => setHealthy(false))
+        }}
+        className="px-2 py-0.5 rounded border cursor-pointer"
+        style={{
+          borderColor: "var(--border)",
+          color:
+            healthy === null
+              ? "var(--foreground)"
+              : healthy
+                ? "#22C55E"
+                : "#EF4444",
+        }}
+      >
+        {healthy === null ? "Test" : healthy ? "Reachable ✓" : "Not reachable"}
+      </button>
+    </div>
+  )
+}
 
 function Section({
   title,
@@ -599,6 +679,26 @@ export default function SettingsPage() {
             hint="Automatically notify when a new version of yt-dlp is available."
             {...shared}
           />
+        </Section>
+
+        <Section title="Browser extension">
+          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+            The Vortex browser extension (Chrome/Firefox) sends video links it
+            finds on a page to this app — through a <code>vortex://</code> link
+            or the local bridge below. The extension's options page wants the
+            bridge token once.
+          </p>
+          <SelectInput
+            label="When a link arrives"
+            field="incomingAction"
+            options={[
+              { value: "prefetch", label: "Open Info page (review first)" },
+              { value: "download", label: "Download immediately (best quality)" },
+            ]}
+            hint="Prefetch shows metadata and the format picker before anything downloads. Immediate mode fetches in the background and starts the download automatically."
+            {...shared}
+          />
+          <BridgeStatus />
         </Section>
       </div>
 
