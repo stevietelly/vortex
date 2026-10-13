@@ -489,6 +489,8 @@ export default function DownloadsPage() {
   const { jobs, removeJob, clearFinished, resumeItem } = useDownloads()
   const { navigate } = useRouter()
   const requests = useRequests()
+  const [tab, setTab] = useState<"downloads" | "requests" | "locations">("downloads")
+
   useEffect(() => {
     loadRequests()
   }, [])
@@ -505,42 +507,27 @@ export default function DownloadsPage() {
       j.status === "done" || j.status === "error" || j.status === "cancelled",
   )
 
-  if (jobs.length === 0 && requests.length === 0) {
-    return (
-      <div className="max-w-3xl mx-auto px-6 py-6">
-        <div className="flex flex-col items-center justify-center min-h-[50vh] px-6 py-16 gap-4">
-          <div
-            className="w-14 h-14 rounded-xl flex items-center justify-center"
-            style={{
-              backgroundColor: "var(--muted)",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            <IconTray size={24} />
-          </div>
-          <div className="text-center">
-            <div
-              className="text-sm font-medium"
-              style={{ color: "var(--foreground)" }}
-            >
-              No downloads yet
-            </div>
-            <div
-              className="text-xs mt-1"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              Downloads will appear here as they start
-            </div>
-          </div>
-        </div>
-        <SaveLocationsSection />
-      </div>
-    )
-  }
+  const tabBtnClass = (activeTab: boolean) =>
+    `text-xs px-3 py-1.5 rounded font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+      activeTab ? "shadow-sm" : ""
+    }`
+
+  const tabBtnStyle = (activeTab: boolean) =>
+    activeTab
+      ? {
+          backgroundColor: "var(--card)",
+          color: "var(--foreground)",
+          border: "1px solid var(--border)",
+        }
+      : {
+          backgroundColor: "transparent",
+          color: "var(--muted-foreground)",
+          border: "1px solid transparent",
+        }
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-6">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1
             className="text-base font-semibold"
@@ -553,10 +540,11 @@ export default function DownloadsPage() {
             style={{ color: "var(--muted-foreground)" }}
           >
             {active.length > 0 ? `${active.length} active · ` : ""}
-            {jobs.length} total
+            {jobs.length} total · {requests.length} saved requests
           </div>
         </div>
-        {finished.length > 0 && (
+
+        {tab === "downloads" && finished.length > 0 && (
           <button
             onClick={clearFinished}
             className="text-xs px-3 py-1.5 rounded border transition-colors cursor-pointer"
@@ -569,103 +557,216 @@ export default function DownloadsPage() {
             Clear completed
           </button>
         )}
+
+        {tab === "requests" && requests.length > 0 && (
+          <button
+            onClick={() => clearRequests()}
+            className="text-xs px-3 py-1.5 rounded border transition-colors cursor-pointer"
+            style={{
+              borderColor: "var(--border)",
+              color: "var(--muted-foreground)",
+              backgroundColor: "var(--card)",
+            }}
+          >
+            Clear all
+          </button>
+        )}
       </div>
 
-      {requests.length > 0 && (
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <div
-              className="mono text-[10px] uppercase tracking-widest"
-              style={{ color: "var(--muted-foreground)" }}
+      {/* Tab Navigation Bar */}
+      <div
+        className="flex items-center gap-1 p-1 rounded-lg border mb-5"
+        style={{
+          borderColor: "var(--border)",
+          backgroundColor: "var(--muted)",
+        }}
+      >
+        <button
+          onClick={() => setTab("downloads")}
+          className={tabBtnClass(tab === "downloads")}
+          style={tabBtnStyle(tab === "downloads")}
+        >
+          <span>Downloads</span>
+          {active.length > 0 && (
+            <span
+              className="text-[10px] px-1.5 py-0.2 rounded-full font-semibold mono"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
             >
-              Saved requests
+              {active.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setTab("requests")}
+          className={tabBtnClass(tab === "requests")}
+          style={tabBtnStyle(tab === "requests")}
+        >
+          <span>Saved Requests</span>
+          {requests.length > 0 && (
+            <span
+              className="text-[10px] px-1.5 py-0.2 rounded-full font-semibold mono"
+              style={{
+                backgroundColor: "var(--background)",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              {requests.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setTab("locations")}
+          className={tabBtnClass(tab === "locations")}
+          style={tabBtnStyle(tab === "locations")}
+        >
+          <span>Save Locations</span>
+        </button>
+      </div>
+
+      {/* Tab Contents */}
+      {tab === "downloads" && (
+        <div className="space-y-5">
+          {jobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[35vh] px-6 py-12 gap-3">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{
+                  backgroundColor: "var(--muted)",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                <IconTray size={20} />
+              </div>
+              <div className="text-center">
+                <div
+                  className="text-sm font-medium"
+                  style={{ color: "var(--foreground)" }}
+                >
+                  No active or recent downloads
+                </div>
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Downloads will appear here as they start
+                </div>
+              </div>
             </div>
-            <button
-              onClick={() => clearRequests()}
-              className="text-xs px-2.5 py-1 rounded border transition-colors cursor-pointer"
+          ) : (
+            <>
+              {active.length > 0 && (
+                <div>
+                  <div
+                    className="mono text-[10px] uppercase tracking-widest mb-2"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    Active ({active.length})
+                  </div>
+                  <div
+                    className="rounded-lg border overflow-hidden"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--card)",
+                    }}
+                  >
+                    {active.map((job) => (
+                      <DownloadRow
+                        key={job.id}
+                        job={job}
+                        onClear={removeJob}
+                        onOpen={(j) => navigate("info", { uid: j.requestId })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {finished.length > 0 && (
+                <div>
+                  <div
+                    className="mono text-[10px] uppercase tracking-widest mb-2"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    Completed & History ({finished.length})
+                  </div>
+                  <div
+                    className="rounded-lg border overflow-hidden"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--card)",
+                    }}
+                  >
+                    {finished.map((job) => (
+                      <DownloadRow
+                        key={job.id}
+                        job={job}
+                        onClear={removeJob}
+                        onOpen={(j) => navigate("info", { uid: j.requestId })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "requests" && (
+        <div>
+          {requests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[35vh] px-6 py-12 gap-3">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{
+                  backgroundColor: "var(--muted)",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                <IconTray size={20} />
+              </div>
+              <div className="text-center">
+                <div
+                  className="text-sm font-medium"
+                  style={{ color: "var(--foreground)" }}
+                >
+                  No saved requests
+                </div>
+                <div
+                  className="text-xs mt-1"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Processed links and media playlists will appear here
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-lg border overflow-hidden"
               style={{
                 borderColor: "var(--border)",
-                color: "var(--muted-foreground)",
                 backgroundColor: "var(--card)",
               }}
             >
-              Clear all
-            </button>
-          </div>
-          <div
-            className="rounded-lg border overflow-hidden"
-            style={{
-              borderColor: "var(--border)",
-              backgroundColor: "var(--card)",
-            }}
-          >
-            {requests.map((r) => (
-              <RequestRow
-                key={r.id}
-                r={r}
-                onOpenRequest={(rec) => navigate("info", { uid: rec.id })}
-                onResumeItem={resumeItem}
-              />
-            ))}
-          </div>
+              {requests.map((r) => (
+                <RequestRow
+                  key={r.id}
+                  r={r}
+                  onOpenRequest={(rec) => navigate("info", { uid: rec.id })}
+                  onResumeItem={resumeItem}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {active.length > 0 && (
-        <div className="mb-5">
-          <div
-            className="mono text-[10px] uppercase tracking-widest mb-2"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Active
-          </div>
-          <div
-            className="rounded-lg border overflow-hidden"
-            style={{
-              borderColor: "var(--border)",
-              backgroundColor: "var(--card)",
-            }}
-          >
-            {active.map((job) => (
-              <DownloadRow
-                key={job.id}
-                job={job}
-                onClear={removeJob}
-                onOpen={(j) => navigate("info", { uid: j.requestId })}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {finished.length > 0 && (
-        <div>
-          <div
-            className="mono text-[10px] uppercase tracking-widest mb-2"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            History
-          </div>
-          <div
-            className="rounded-lg border overflow-hidden"
-            style={{
-              borderColor: "var(--border)",
-              backgroundColor: "var(--card)",
-            }}
-          >
-            {finished.map((job) => (
-              <DownloadRow
-                key={job.id}
-                job={job}
-                onClear={removeJob}
-                onOpen={(j) => navigate("info", { uid: j.requestId })}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <SaveLocationsSection />
+      {tab === "locations" && <SaveLocationsSection />}
     </div>
   )
 }
