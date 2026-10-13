@@ -42,6 +42,13 @@
       "preload": [
         "sqlite:vortex.db"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "vortex"
+        ]
+      }
     }
   }
 }
