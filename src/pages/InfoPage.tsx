@@ -662,7 +662,9 @@ function DownloadPanel({
             onDownload(
               selectedId,
               downloadAll,
-              profileId || undefined,
+              // Custom mode disables the folder profile entirely — even with
+              // no folder typed yet, a stale profileId must not win.
+              isCustomFolderActive ? undefined : profileId || undefined,
               isCustomFolderActive && customFolder.trim() ? customFolder.trim() : undefined,
             )
           }
