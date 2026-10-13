@@ -33,10 +33,18 @@
     const items = []
     const seen = new Set()
     const push = (url, kind) => {
-      if (!url || seen.has(url) || items.length >= MAX_ITEMS) return
-      if (url.startsWith("javascript:") || url.startsWith("data:")) return
-      seen.add(url)
-      items.push({ url, kind })
+      if (!url || items.length >= MAX_ITEMS) return
+      let parsed
+      try {
+        parsed = new URL(url)
+      } catch {
+        return
+      }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return
+      const validUrl = parsed.href
+      if (seen.has(validUrl)) return
+      seen.add(validUrl)
+      items.push({ url: validUrl, kind })
     }
 
     // Direct media in the DOM.

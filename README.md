@@ -85,6 +85,15 @@ When you click the Vortex toolbar icon the popup does two things in parallel:
 
 Each item has its own **Send** button. If you have multiple items there is a **Send all** button too.
 
+#### Context menu ("Send to Vortex")
+
+You can also send links directly without opening the popup:
+- **Right-click a link** → selects the link URL
+- **Right-click a video or audio player** → selects the media source URL
+- **Right-click anywhere on the page** → selects the page URL
+
+Click **Send to Vortex** in the browser's context menu. The extension toolbar icon will briefly flash a `✓` badge confirming delivery.
+
 #### Content script scanning
 
 The content script (`extension/src/content.js`) runs at `document_idle` on every http/https page and responds to a `vortex:scan` message from the popup. It looks for:
