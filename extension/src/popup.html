@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <div class="title">
+        <img src="../icons/32x32.png" alt="" width="16" height="16" />
+        Vortex
+      </div>
+      <div id="status" class="status" title="Vortex app status">
+        <span class="dot"></span><span class="status-text">checking…</span>
+      </div>
+    </header>
+
+    <section id="page-row" class="row page-row" hidden>
+      <div class="meta">
+        <div class="label">This page</div>
+        <div id="page-title" class="sub truncate"></div>
+      </div>
+      <button id="send-page" class="btn primary">Send</button>
+    </section>
+
+    <div id="found-label" class="section-label" hidden>Found on this page</div>
+    <section id="items"></section>
+    <div id="empty" class="empty" hidden>No videos found — try sending the page itself</div>
+
+    <footer>
+      <button id="send-all" class="btn" hidden>Send all</button>
+      <button id="open-options" class="btn ghost">Options</button>
+    </footer>
+    <div id="toast" class="toast" hidden></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
