@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "react:dev": "vite --host 0.0.0.0",
+    "dev": "tauri dev",
+    "react:build": "vite build",
+    "build": "tauri build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt"
