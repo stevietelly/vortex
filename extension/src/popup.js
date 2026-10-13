@@ -48,6 +48,11 @@ function sendViaDeepLink(url) {
 
 async function deliver(urls) {
   const mode = options.transport
+  // Bridge-only with no token can never succeed — fail loudly instead of
+  // silently falling through to deep links.
+  if (mode === "bridge" && !options.token) {
+    throw new Error("no bridge token set — paste it in the extension options")
+  }
   if (mode !== "deeplink" && options.token) {
     try {
       await sendViaBridge(urls)
